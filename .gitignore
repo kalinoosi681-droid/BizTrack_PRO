@@ -1,0 +1,7 @@
+biztrack.db
+__pycache__/
+backups/
+receipts/
+*.pyc
+*.pyo
+.DS_Store
