@@ -25,7 +25,7 @@ bash install.sh
 python biztrack.py          # CLI mode
 python biztrack.py --web    # Web dashboard → http://127.0.0.1:5000
 python biztrack.py --gui    # Desktop GUI
-
+```
 ##Screenshots
 
 CLI menu
