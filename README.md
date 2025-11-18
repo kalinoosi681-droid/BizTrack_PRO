@@ -29,12 +29,17 @@ python biztrack.py --gui    # Desktop GUI
 **Screenshots
 
 CLI menu
+![cli_menu.png](screenshots/cli_menu.png)
 
 Web dashboard
+![web_menu.png](screenshots/web_menu.png)
 
-Receipt example
+Products and Sales
+![web_products.png](screenshots/web_products.png)
+![web_sales.png](screenshots/web_sales.png)
 
-Tkinter GUI
+Receipt
+![cli_receipt.png](screenshots/cli_receipt.png)
 
 
 ##Why This Project Exists
