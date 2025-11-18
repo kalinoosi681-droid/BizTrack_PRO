@@ -25,10 +25,8 @@ bash install.sh
 python biztrack.py          # CLI mode
 python biztrack.py --web    # Web dashboard → http://127.0.0.1:5000
 python biztrack.py --gui    # Desktop GUI
-<<<<<<< HEAD
-=======
 ```
-##Screenshots
+**Screenshots
 
 CLI menu
 
@@ -48,9 +46,4 @@ Open for contributions • Paid customization gigs available [https://www.fiverr
 
 Made with love in Lesotho
 
-MIT License
-
-
-
-
->>>>>>> 403a36258dda8edb74ffb7ce6bcd37863652b537
+MIT License 
