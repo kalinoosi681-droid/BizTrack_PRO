@@ -36,10 +36,8 @@ Web dashboard
 
 Products and Sales
 ![web_products.png](screenshots/web_products.png)
-![web_sales.png](screenshots/web_sales.png)
 
-Receipt
-![cli_receipt.png](screenshots/cli_receipt.png)
+![web_sales.png](screenshots/web_sales.png)
 
 
 ##Why This Project Exists
