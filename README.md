@@ -18,36 +18,10 @@ Self-taught • Zero prior experience • No laptop • 100% passing tests
 
 ### Quick Start (SSH recommended)
 ```bash
-git clone git@github.com:kalinoosi681/BizTrack_PRO.git
+git clone git@github.com:kalinoosi681-droid/BizTrack_PRO.git
 cd BizTrack_PRO
 bash install.sh
 
 python biztrack.py          # CLI mode
 python biztrack.py --web    # Web dashboard → http://127.0.0.1:5000
 python biztrack.py --gui    # Desktop GUI
-
-##Screenshots
-
-CLI menu
-
-Web dashboard
-
-Receipt example
-
-Tkinter GUI
-
-
-##Why This Project Exists
-
-11 weeks ago I wrote my first line of Python.Today I shipped a full ERP system on my phone.
-                            No excuses. Just code. 
-
-Open for contributions • Paid customization gigs available [https://www.fiverr.com/s/zWgWDjo]/[https://www.upwork.com/freelancers/~0111dc3602d28046c4?mp_source=share]
-
-Made with love in Lesotho
-
-MIT License
-
-
-
-
