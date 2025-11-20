@@ -2,7 +2,7 @@ from __future__ import annotations
 
 #!/usr/bin/env python3
 """
-biztrack_full.py
+biztrack.py
 
 Single-file professional BizTrack:
 - CLI (default)
@@ -35,7 +35,7 @@ from typing import Optional, Sequence, Tuple
 
 # Optional GUI / web imports
 try:
-    from flask import Flask, jsonify, request, render_template_string, redirect, url_for
+    from flask import Flask, jsonify, request, render_template_string, redirect, url_for, session
     FLASK_AVAILABLE = True
 except Exception:
     FLASK_AVAILABLE = False
@@ -95,6 +95,13 @@ def get_connection(db_file: Optional[str] = None) -> sqlite3.Connection:
     return conn
 
 def execute_query(query: str, params: Sequence = (), fetch: bool = False, fetchone: bool = False, commit: bool = False):
+    """
+    Execute SQL. Returns:
+      - If fetchone=True -> single row tuple or None
+      - If fetch=True -> list of rows (possibly empty)
+      - Otherwise -> last cursor (or True on commit) but typically None
+    On DB exception: returns None for fetchone, [] for fetch, and False otherwise.
+    """
     try:
         with get_connection() as conn:
             cur = conn.cursor()
@@ -107,9 +114,19 @@ def execute_query(query: str, params: Sequence = (), fetch: bool = False, fetcho
             if commit:
                 conn.commit()
             cur.close()
+            # Normalize to safe defaults so callers don't blow up with TypeError
+            if fetch:
+                return result if result is not None else []
+            if fetchone:
+                return result  # might be None
             return result
     except Exception as exc:
-        print(Fore.RED + f"[DB ERROR] {exc}")
+        # print more detail in debug logs but do not crash the app
+        print(Fore.RED + f"[DB ERROR] Query failed: {query} | Params: {params} | Err: {exc}")
+        if fetch:
+            return []
+        if fetchone:
+            return None
         return None
 
 # ---------------------------
@@ -672,8 +689,8 @@ def import_sales_csv(filename: str = "sales.csv"):
 def interactive_menu():
     while True:
         print(Fore.CYAN + Style.BRIGHT + "\n=== BIZTRACK PRO MENU ===")
-        print("1. Add Product          | 8. Customer History")
-        print("2. View Products         | 9. Update Product")
+        print("1. Add Product          | 8. Customer History      | 16. Import CSV File")
+        print("2. View Products         | 9. Update Product       | 17. Export CSV File")
         print("3. Search Products       | 10. Delete Product")
         print("4. Add Customer          | 11. Update Customer")
         print("5. View Customers        | 12. Delete Customer")
@@ -706,6 +723,8 @@ def interactive_menu():
             b = backup_db()
             print(Fore.GREEN + f"Backup: {b}" if b else Fore.RED + "Backup failed")
         elif choice == '15': remove_duplicates()
+        elif choice == '16': import_sales_csv()
+        elif choice == '17': export_sales_csv()
         elif choice == '0':
             print(Fore.MAGENTA + Style.BRIGHT + "\nThank you for using BizTrack PRO! 🚀")
             break
@@ -720,45 +739,415 @@ def create_flask_app():
         raise RuntimeError("Flask is not installed. Install with `pip install flask`")
 
     app = Flask("BizTrackWeb")
+    app.secret_key = "332654767225e3936c923827c4bcbb4a"
+
     #Simple HTML templates inline for quick demo
+    LOGIN_HTML = """
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BizTrack PRO — Admin Login</title>
+
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at top, #1e1e1e, #0d0d0d);
+            color: #fff;
+            overflow: hidden;
+        }
+
+        /* floating glowing circles */
+        .glow-circle {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.25;
+            animation: float 10s infinite ease-in-out alternate;
+        }
+
+        .circle1 { width: 350px; height: 350px; background: #0d6efd; top: -120px; left: -80px; }
+        .circle2 { width: 300px; height: 300px; background: #6610f2; bottom: -120px; right: -60px; }
+
+        @keyframes float {
+            from { transform: translateY(0px) scale(1); }
+            to   { transform: translateY(40px) scale(1.05); }
+        }
+
+        .login-card {
+            position: relative;
+            width: 380px;
+            padding: 2rem;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+            animation: fadeIn 0.8s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .brand-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .brand-title img {
+            height: 48px;
+            margin-right: 12px;
+        }
+
+        .btn-login {
+            background: linear-gradient(135deg, #0d6efd, #0b58d1);
+            border: none;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        .btn-login:hover {
+            opacity: 0.85;
+            transform: translateY(-2px);
+        }
+
+        .form-label {
+            font-weight: 600;
+        }
+
+        footer {
+            position: absolute;
+            bottom: 20px;
+            text-align: center;
+            width: 100%;
+            font-size: 0.9rem;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Background glowing circles -->
+<div class="glow-circle circle1"></div>
+<div class="glow-circle circle2"></div>
+
+<div class="login-card">
+
+    <div class="brand-title">
+        <img src="/static/biztrack_logo.png" alt="BizTrack Logo">
+        BizTrack <span class="text-primary">PRO</span>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger py-2 text-center">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST">
+        <label class="form-label">Username</label>
+        <input type="text" class="form-control mb-3" name="username" required>
+
+        <label class="form-label">Password</label>
+        <input type="password" class="form-control mb-4" name="password" required>
+
+        <button class="btn btn-login w-100 py-2">Login</button>
+    </form>
+</div>
+
+<footer>
+    © {{ year }} BizTrack PRO — All rights reserved
+</footer>
+
+</body>
+</html>
+"""
+
     INDEX_HTML = """
-    <html>
-    <head><title>BizTrack</title></head>
-    <body>
-      <h1>BizTrack — Inventory & Sales</h1>
-      <p><a href="/products">Products</a> | <a href="/customers">Customers</a> | <a href="/sales">Sales</a></p>
-    </body>
-    </html>
-    """
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} - BizTrack PRO</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root { --bs-body-bg: #121212; --bs-body-color: #e0e0e0; }
+        [data-bs-theme="light"] { --bs-body-bg: #f8f9fa; --bs-body-color: #212529; }
+        body { background: var(--bs-body-bg); color: var(--bs-body-color); min-height: 100vh; padding-bottom: 3rem; }
+        .metric { 
+            background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)); 
+            border-radius: 12px; 
+            border-left: 5px solid #0d6efd; 
+            backdrop-filter: blur(10px);
+        }
+        .card {border: none; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        .navbar { border-radius: 16px; margin-bottom: 2rem; }
+        footer { margin-top: 4rem; text-align: center; color: var(--bs-secondary-color); }
+        .table th { position: sticky; top: 0; z-index: 10; }
+    </style>
+</head>
+<body>
 
-    TABLE_HTML = """
-    <html>
-    <head><title>{{title}}</title></head>
-    <body>
-      <h2>{{title}}</h2>
-      <pre>{{table}}</pre>
-      <p><a href="/">Back</a></p>
-    </body>
-    </html>
-    """
-    app.route("/")
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
+    <img src="./biztrack_logo.png" alt="BizTrack PRO" style="height:40px; margin-right:10px;"></a>
+         <a href="/logout" class="btn btn-danger btn-sm ms-3">
+          <i class="bi bi-box-arrow-right"></i> Logout</a>
+        <button class="btn btn-outline-light btn-sm ms-3" onclick="document.documentElement.setAttribute('data-bs-theme', 
+            document.documentElement.getAttribute('data-bs-theme') === 'light' ? 'dark' : 'light')">
+            <i class="bi bi-sun-fill"></i>/<i class="bi bi-moon-fill"></i>
+        </button>
+    </div>
+</nav>
+
+<div class="container">
+
+    <!-- Dashboard Metrics -->
+    {% if product_count is defined %}
+    <div class="row g-4 mb-5 text-center">
+        <div class="col-6 col-md-3">
+            <div class="p-4 metric rounded shadow-sm">
+                <h2 class="display-6 fw-bold text-primary">{{ product_count }}</h2>
+                <small class="text-muted">Products</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="p-4 metric rounded shadow-sm">
+                <h2 class="display-6 fw-bold text-info">{{ customer_count }}</h2>
+                <small class="text-muted">Customers</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="p-4 metric rounded shadow-sm">
+                <h2 class="display-6 fw-bold text-warning">{{ sales_count }}</h2>
+                <small class="text-muted">Sales Records</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="p-4 metric rounded shadow-sm text-success">
+                <h2 class="display-6 fw-bold">$ {{ "%.2f"|format(total_revenue) }}</h2>
+                <small class="text-muted">Total Revenue</small>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3"><i class="bi bi-table"></i> {{ title }}</h1>
+        <div>
+            <button class="btn-group">
+                <a href="/" class="btn btn-outline-primary"><i class="bi bi-speedometer2"></i> Dashboard</a>
+                <a href="/products" class="btn btn-outline-secondary"><i class="bi bi-box"></i> Products</a>
+                <a href="/customers" class="btn btn-outline-secondary"><i class="bi bi-people"></i> Customers</a>
+                <a href="/sales" class="btn btn-outline-secondary"><i class="bi bi-cart"></i> Sales</a>
+            </div>
+        </div>
+    </div>
+
+        <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <input type="search" id="globalSearch" class="form-control w-50" placeholder="Search table..." onkeyup="filterTable()">
+            <button class="btn btn-success btn-sm" onclick="backup_db()">
+                <i class="bi bi-download"></i> Backup DB
+            </button>
+        </div>
+        <div class="card-body p-0 overflow-auto">
+            {% if table %}
+                <!-- Render pre-built HTML table (tabulate output) directly -->
+                <div class="p-3">
+                    {{ table|safe }}
+                </div>
+            {% else %}
+                <table class="table table-hover table-striped mb-0" id="dataTable">
+                    <thead class="table-dark">
+                        <tr>
+                            {% if headers %}
+                                {% for h in headers %}
+                                    <th>{{ h }}</th>
+                                {% endfor %}
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if data %}
+                            {% for row in data %}
+                                <tr>
+                                    {% for cell in row %}
+                                        <td>{{ cell }}</td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="{{ headers|length if headers else 1 }}" class="text-center text-muted">No records</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            {% endif %}
+        </div>
+    </div>
+
+
+    <footer class="mt-5">
+        <small class="text-muted">BizTrack PRO — Built with ❤️ • ©KD {{ year }}</small>
+    </footer>
+
+</div>
+
+<script>
+function filterTable() {
+    let input = document.getElementById("globalSearch");
+    let filter = input.value.toLowerCase();
+    let table = document.getElementById("dataTable");
+    let tr = table.getElementsByTagName("tr");
+    for (let i = 1; i < tr.length; i++) {
+        let txt = tr[i].textContent || tr[i].innerText;
+        tr[i].style.display = txt.toLowerCase().indexOf(filter) > -1 ? "" : "none";
+    }
+}
+
+function backup_db() {
+    if (confirm("Download database backup?")) {
+        let a = document.createElement('a');
+        a.href = "/backup";
+        a.download = "biztrack_backup_" + new Date().toISOString().slice(0,10) + ".db";
+        a.click();
+    }
+}
+
+// Auto dark/light mode based on system preference
+if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+    document.documentElement.setAttribute('data-bs-theme', 'light');
+}
+</script>
+
+</body>
+</html>
+"""
+
+# ==========================
+# WEB AUTHENTICATION LOGIC
+# ==========================
+
+    def is_logged_in():
+        return session.get("logged_in") is True
+
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login_web():
+    # If already logged in → send to dashboard
+        if session.get("logged_in"):
+            return redirect(url_for("index"))
+
+    # If POST → authenticate
+        if request.method == "POST":
+            username = request.form.get("username")
+            pw = request.form.get("password")
+
+        # Fetch admin record
+            row = execute_query("SELECT salt, passhash FROM Admins WHERE username = ?;", (username,), fetchone=True)
+            if not row:
+                return render_template_string(LOGIN_HTML, error="Invalid username", year=datetime.now().year)
+
+            salt_hex, key_hex = row
+
+        # Verify password
+            if verify_password(pw, salt_hex, key_hex):
+                session["logged_in"] = True
+                session["username"] = username
+                return redirect(url_for("index"))
+
+            return render_template_string(LOGIN_HTML, error="Incorrect password", year=datetime.now().year)
+
+   # If GET → show login UI
+        return render_template_string(LOGIN_HTML, year=datetime.now().year)
+
+    @app.route("/logout")
+    def logout_web():
+        session.clear()
+        return redirect(url_for("login_web"))
+
+    @app.route('/')
     def index():
-        return render_template_string(INDEX_HTML)
+        if not is_logged_in():
+            return redirect(url_for("login_web"))
 
+    # Create DB + tables if not exists
+        if not os.path.exists('DB_FILE'):
+            init_db()
+
+        headers = ["Sale ID", "Customer", "Product", "Qty", "Total $", "Date"]
+
+    # Safe counts (always return 0 if table empty or error)
+        try:
+            product_count = execute_query("SELECT COUNT(*) FROM products", fetchone=True)[0]
+        except:
+            product_count = 0
+
+        try:
+            customer_count = execute_query("SELECT COUNT(*) FROM customers", fetchone=True)[0]
+        except:
+            customer_count = 0
+
+        try:
+            total_revenue = execute_query("SELECT IFNULL(SUM(total_price), 0) FROM sales", fetchone=True)[0]
+        except:
+            total_revenue = 0.0
+
+    # This is the query that was returning None
+        sales_rows = execute_query("""
+            SELECT s.id, c.name, p.name, s.qty, s.total_price, s.date
+            FROM sales s
+            JOIN customers c ON s.customer_id = c.id
+            JOIN products p ON s.product_id = p.id
+            ORDER BY s.date DESC LIMIT 50;
+        """, fetch=True) or []
+
+        return render_template_string(INDEX_HTML,
+        title='Dashboard',
+        headers=headers,
+        data=sales_rows,
+        product_count=product_count,
+        customer_count=customer_count,
+        sales_count=len(sales_rows),   # now safe!
+        total_revenue=total_revenue,
+        year=datetime.now().year
+    )
     @app.route("/api/products")
     def api_products():
+        if not is_logged_in():
+            return jsonify({"error": "Unauthorized"}), 401
         rows = execute_query("SELECT id,name,category,qty,price FROM products ORDER BY id;", fetch=True) or []
         data = [{"id": r[0], "name": r[1], "category": r[2], "qty": r[3], "price": r[4]} for r in rows]
         return jsonify(data)
 
     @app.route("/api/customers")
     def api_customers():
+        if not is_logged_in():
+            return jsonify({"error": "Unauthorized"}), 401
         rows = execute_query("SELECT id,name,phone,email FROM customers ORDER BY id;", fetch=True) or []
         data = [{"id": r[0], "name": r[1], "phone": r[2], "email": r[3]} for r in rows]
         return jsonify(data)
 
     @app.route("/api/sales")
     def api_sales():
+        if not is_logged_in():
+            return jsonify({"error": "Unauthorized"}), 401
         rows = execute_query("""
             SELECT s.id, c.name, p.name, s.qty, s.total_price, s.date
             FROM sales s
@@ -769,29 +1158,58 @@ def create_flask_app():
         data = [{"id": r[0], "customer": r[1], "product": r[2], "qty": r[3], "total": r[4], "date": r[5]} for r in rows]
         return jsonify(data)
 
-    @app.route("/products")
+    @app.route('/dashboard')
+    def dashboard():
+        if not is_logged_in():
+            return redirect(url_for("login_web"))
+        product_count = execute_query('SELECT COUNT(*) FROM products;', fetchone=True) or []
+        customer_count = execute_query('SELECT COUNT(*) FROM customers;', fetchone=True) or []
+        sales_rows = execute_query("""
+            SELECT s.id, IFNULL(c.name,'Unknown'), IFNULL(p.name,'Unknown'), s.qty, s.total_price, s.date
+            FROM sales s LEFT JOIN customers c ON s.customer_id=c.id LEFT JOIN products p ON s.product_id=p.id
+            ORDER BY s.date DESC LIMIT 50;
+        """, fetch=True) or []
+        total_revenue = execute_query('SELECT IFNULL(SUM(total_price),0) FROM sales;', fetchone=True) or []
+        headers = ['Sale ID','Customer','Product','Qty','Total','Date']
+        return render_template_string(INDEX_HTML,
+        title='Dashboard',
+        data=sales_rows,
+        product_count=product_count,
+        customer_count=customer_count,
+        sales_count=len(sales_rows),
+        year=datetime.now().year)
+
+    @app.route('/products')
     def products_page():
-        rows = execute_query("SELECT id,name,category,qty,price FROM products ORDER BY id;", fetch=True) or []
-        table = tabulate(rows, headers=['ID','Name','Category','Qty','Price'], tablefmt='psql')
-        return render_template_string(TABLE_HTML, title="Products", table=table)
+        if not is_logged_in():
+            return redirect(url_for("login_web"))
+        rows = execute_query("SELECT id, name, category, qty, price FROM products ORDER BY id;", fetch=True) or []
+        table = tabulate(rows, headers=["ID", "Name", "Category", "Qty", "Price"], tablefmt="html")
+        return render_template_string(INDEX_HTML, title="Products", table=table)
 
-    @app.route("/customers")
+
+    @app.route('/customers')
     def customers_page():
-        rows = execute_query("SELECT id,name,phone,email FROM customers ORDER BY id;", fetch=True) or []
-        table = tabulate(rows, headers=['ID','Name','Phone','Email'], tablefmt='psql')
-        return render_template_string(TABLE_HTML, title="Customers", table=table)
+        if not is_logged_in():
+            return redirect(url_for("login_web"))
+        rows = execute_query("SELECT id, name, phone, email FROM customers ORDER BY id;", fetch=True) or []
+        table = tabulate(rows, headers=["ID", "Name", "Phone", "Email"], tablefmt="html")
+        return render_template_string(INDEX_HTML, title="Customers", table=table)
 
-    @app.route("/sales")
+
+    @app.route('/sales')
     def sales_page():
+        if not is_logged_in():
+            return redirect(url_for("login_web"))
         rows = execute_query("""
             SELECT s.id, c.name, p.name, s.qty, s.total_price, s.date
             FROM sales s
-            LEFT JOIN customers c ON s.customer_id=c.id
-            LEFT JOIN products p ON s.product_id=p.id
+            LEFT JOIN customers c ON s.customer_id = c.id
+            LEFT JOIN products p ON s.product_id = p.id
             ORDER BY s.date DESC;
         """, fetch=True) or []
-        table = tabulate(rows, headers=['Sale ID','Customer','Product','Qty','Total','Date'], tablefmt='psql')
-        return render_template_string(TABLE_HTML, title="Sales", table=table)
+        table = tabulate(rows, headers=["ID", "Customer", "Product", "Qty", "Total $", "Date"], tablefmt="html")
+        return render_template_string(INDEX_HTML, title="Sales", table=table)
 
     # Simple API to record sale (POST JSON)
     @app.route("/api/sale", methods=["POST"])

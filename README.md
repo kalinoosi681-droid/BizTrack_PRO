@@ -1,56 +1,103 @@
-# BizTrack PRO — Full Business Management System in One Python File
+##BizTrack PRO
 
-**Built from scratch in under 3 months — entirely on Termux (Android phone)**  
-Self-taught • Zero prior experience • No laptop • 100% passing tests
+**A modern, lightweight inventory-and-sales management web + CLI application for small businesses.**
 
-### Features
-- Products • Customers • Sales • Payroll (full CRUD)
-- Secure admin login (PBKDF2)
-- CLI + Flask web dashboard + Tkinter GUI
-- CSV import/export • Text receipts • Auto backups
-- Low-stock alerts • Duplicate cleanup
-- In-memory pytest suite
+---
+Self-taught • Zero prior experience • No laptop • 100 % passing tests
 
-### Tech Stack
-- Pure Python 3
-- SQLite (zero setup)
-- Flask • Tkinter • colorama • tabulate
+<p align="center">
+  <img src="screenshots/logo.png" alt="BizTrack PRO Logo" width="500>
+</p>
 
-### Quick Start (SSH recommended)
+---
+
+## 🚀 What It Does  
+- Manage **Products**, **Customers**, **Sales**, and **Payroll** from a unified interface.  
+- Two modes:  
+  - CLI mode (for terminals)  
+  - Web mode (browser-based, fully secured with login)  
+- Export and import CSVs, backup the database, receipts, etc.  
+- Built in Python using SQLite, Flask, Bootstrap 5 — minimal dependencies.
+
+---
+
+## 🔐 New in this Version (v2.x)  
+- Polished web UI with modern dark theme and glass-morphism styling.  
+- Web authentication: admin login, session-based access control.  
+- Role-ready design for deployment and real-world use (e.g., in cloud or on-prem).  
+- Improved code structure, database API stable, easier for customization and freelance work.
+
+---
+
+## 🧩 Features Summary  
+| Feature           | Description                                 |
+|-------------------|---------------------------------------------|
+| Products          | Add, list, update, delete products          |
+| Customers         | Manage your customers and their contact info|
+| Sales             | Record sales, link to product & customer    |
+| Payroll           | Manage employees and salary items           |
+| Web Interface     | Browser UI (login required)                 |
+| CLI Interface     | Terminal version for quick operations       |
+| Export/Backup     | CSV export, DB backup built-in              |
+
+---
+
+## 🛠️ Getting Started  
+1. Clone the repo:  
+   ```bash
+   git clone https://github.com/kalinoosi681-droid/BizTrack_PRO.git
+   cd BizTrack_PRO
+   ```
+2. Create a virtual environment and install dependencies:
 ```bash
-git clone git@github.com:kalinoosi681-droid/BizTrack_PRO.git
-cd BizTrack_PRO
-bash install.sh
-
-python biztrack.py          # CLI mode
-python biztrack.py --web    # Web dashboard → http://127.0.0.1:5000
-python biztrack.py --gui    # Desktop GUI
-<<<<<<< HEAD
-=======
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
-##Screenshots
 
-CLI menu
+Seed the database (will auto-create tables if needed).
 
-Web dashboard
+Launch web mode:
+```bash
+python biztrack.py --web
+```
 
-Receipt example
+Then navigate to http://127.0.0.1:5000/login to log in.
 
-Tkinter GUI
+5. Use CLI mode:
+```bash
+python biztrack.py
+```
+🔧 Configuration
 
+Database file: biztrack.db by default (in project root).
 
-##Why This Project Exists
+Admin login: The first run creates the admin user entry (or you can use CLI mode to add one).
 
-11 weeks ago I wrote my first line of Python.Today I shipped a full ERP system on my phone.
-                            No excuses. Just code. 
+Static assets: Place your company logo (biztrack_logo.png) in static/ folder.
 
-Open for contributions • Paid customization gigs available [https://www.fiverr.com/s/zWgWDjo]/[https://www.upwork.com/freelancers/~0111dc3602d28046c4?mp_source=share]
+Customisation: You can modify INDEX_HTML, LOGIN_HTML, or extract templates into .html files for custom themes.
 
-Made with love in Lesotho
+Running Tests
 
-MIT License
+We provide tests for core database logic. To run them:
+```bash
+pytest -q
+```
 
+All tests pass under the current version.
 
+📄 License
 
+Distributed under the MIT License.
 
->>>>>>> 403a36258dda8edb74ffb7ce6bcd37863652b537
+Contribution
+
+Contributions are welcome: new features, improved UI, bug fixes.
+Please open an issue or submit a pull request.
+
+🧠 About the Developer
+
+Built by Kali Noosi.
+I’m a freelance Backend Dev & web design developer specialising in Python tools for business workflows.
+
