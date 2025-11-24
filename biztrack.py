@@ -32,11 +32,14 @@ from datetime import datetime
 from pathlib import Path
 from shutil import copy2
 from typing import Optional, Sequence, Tuple
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
 
 # Optional GUI / web imports
 try:
     from flask import Flask, jsonify, request, render_template_string, redirect, url_for, session
     FLASK_AVAILABLE = True
+    from flask import send_file
 except Exception:
     FLASK_AVAILABLE = False
 
@@ -62,9 +65,32 @@ RECEIPTS_DIR.mkdir(exist_ok=True)
 BACKUP_DIR.mkdir(exist_ok=True)
 
 HASH_NAME = "sha256"
-ITERATIONS = 150_000
+ITERATIONS = 400_000
 SALT_BYTES = 16
 KEY_LEN = 32
+
+# Twilio optional SMS integration
+TWILIO_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+TWILIO_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+TWILIO_FROM = os.environ.get("TWILIO_FROM")
+MANAGER_PHONE = os.environ.get("BIZTRACK_MANAGER_PHONE")  # single manager fallback
+
+def send_low_stock_sms(message: str, phone: Optional[str] = None) -> bool:
+    from reportlab.lib.pagesizes import A4
+    target = phone or MANAGER_PHONE
+    if not (TWILIO_SID and TWILIO_TOKEN and TWILIO_FROM and target):
+        # not configured; silently skip but log
+        print(Fore.YELLOW + "Twilio not configured; skipping SMS.")
+        return False
+    try:
+        from twilio.rest import Client
+        client = Client(TWILIO_SID, TWILIO_TOKEN)
+        client.messages.create(body=message, from_=TWILIO_FROM, to=target)
+        print(Fore.GREEN + f"SMS sent to {target}")
+        return True
+    except Exception as exc:
+        print(Fore.RED + f"Twilio error: {exc}")
+        return False
 
 # ---------------------------
 # DB helpers (single-access)
@@ -122,12 +148,73 @@ def execute_query(query: str, params: Sequence = (), fetch: bool = False, fetcho
             return result
     except Exception as exc:
         # print more detail in debug logs but do not crash the app
-        print(Fore.RED + f"[DB ERROR] Query failed: {query} | Params: {params} | Err: {exc}")
+        import logging
+        logger = logging.getLogger("biztrack")
+        logging.basicConfig(level=logging.INFO)
+        logger.error("DB ERROR: %s | Params: %s", query, params)
         if fetch:
             return []
         if fetchone:
             return None
         return None
+
+def generate_invoice_number() -> str:
+    return "INV" + datetime.now().strftime("%Y%m%d%H%M%S")
+
+def create_invoice_and_insert_sales(customer_id: int, items: list, sale_time: Optional[str] = None) -> Optional[int]:
+    """
+    items: list of dicts {pid, qty, price, line_total}
+    Creates invoice row and multiple sales rows linked to invoice_id.
+    Returns invoice_id or None on error.
+    """
+    if not sale_time:
+        sale_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    invoice_number = generate_invoice_number()
+    total = sum(i["line_total"] for i in items)
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("BEGIN;")
+            cur.execute("INSERT INTO invoices (invoice_number, customer_id, total, date) VALUES (?, ?, ?, ?);",
+                        (invoice_number, customer_id, total, sale_time))
+            invoice_id = cur.lastrowid
+            # insert each line into sales with invoice_id
+            for it in items:
+                cur.execute("INSERT INTO sales (customer_id, product_id, qty, total_price, date, invoice_id) VALUES (?, ?, ?, ?, ?, ?);",
+                            (customer_id, it["pid"], it["qty"], it["line_total"], sale_time, invoice_id))
+                # decrement stock (ensure not negative)
+                cur.execute("UPDATE products SET qty = MAX(qty - ?, 0) WHERE id = ?;", (it["qty"], it["pid"]))
+            conn.commit()
+            cur.close()
+        return invoice_id
+    except Exception as exc:
+        print(Fore.RED + f"[Invoice Error] {exc}")
+        return None
+
+#--------------------------
+
+# CENTRALIZED VALIDATORS
+
+#--------------------------
+def validate_product(name: str, qty: int, price: float):
+    if not name or not name.strip():
+        raise ValueError("Product name cannot be empty")
+    if qty < 0:
+        raise ValueError("Quantity cannot be negative")
+    if price < 0:
+        raise ValueError("Price cannot be negative")
+
+def validate_customer(name, phone):
+    if not name.strip():
+        raise ValueError("Customer name required")
+    if phone and len(phone) < 8:
+        raise ValueError("Phone number invalid")
+
+def validate_sale_item(item):
+    if item['qty'] <= 0:
+        raise ValueError("Sale quantity must be positive")
+    if item['price'] < 0:
+        raise ValueError("Price cannot be negative")
 
 # ---------------------------
 # Password/hash utils
@@ -227,6 +314,31 @@ def seed_default_data() -> None:
     else:
         print(Fore.BLUE + "Product data exists, skipping seed.")
 
+# Ensure invoices table exists and sales has invoice_id column
+def ensure_invoice_schema():
+    # create invoices table if not exists
+    execute_query("""
+        CREATE TABLE IF NOT EXISTS invoices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_number TEXT UNIQUE NOT NULL,
+            customer_id INTEGER,
+            total REAL,
+            date TEXT,
+            FOREIGN KEY(customer_id) REFERENCES customers(id)
+        );
+    """, commit=True)
+
+    # add invoice_id column to sales if missing
+    # SQLite doesn't support IF NOT EXISTS for ALTER COLUMN; check pragma
+    cols = execute_query("PRAGMA table_info(sales);", fetch=True) or []
+    col_names = [c[1] for c in cols]
+    if "invoice_id" not in col_names:
+        try:
+            execute_query("ALTER TABLE sales ADD COLUMN invoice_id INTEGER;", commit=True)
+            # Note: existing rows will have NULL invoice_id
+        except Exception:
+            pass
+
 def backup_db() -> Optional[str]:
     try:
         src = Path(DB_FILE)
@@ -306,6 +418,8 @@ def set_admin_password_interactive() -> None:
             break
 
 def login() -> bool:
+    from hmac import compare_digest
+    compare_digest(stored_hash, computed_hash)
     print(Fore.CYAN + Style.BRIGHT + "\n=== Admin Login ===")
     username = input("Admin username: ").strip()
     pw = getpass.getpass("Password: ")
@@ -324,21 +438,57 @@ def login() -> bool:
         print(Fore.RED + f"[Login Error] {exc}")
         return False
 
+def reset_admin_password_cli():
+    print(Fore.CYAN + "=== Reset Admin Password (requires current password) ===")
+    username = input("Admin username: ").strip()
+    if not username:
+        print(Fore.RED + "Username required.")
+        return
+    current = getpass.getpass("Current password: ")
+    row = execute_query("SELECT salt, passhash FROM Admins WHERE username = ?;", (username,), fetchone=True)
+    if not row:
+        print(Fore.RED + "Admin user not found.")
+        return
+    salt, ph = row
+    if not verify_password(current, salt, ph):
+        print(Fore.RED + "Current password incorrect.")
+        return
+    while True:
+        newpw = getpass.getpass("New password: ")
+        newpw2 = getpass.getpass("Confirm new password: ")
+        if newpw != newpw2:
+            print(Fore.RED + "Passwords do not match.")
+            continue
+        if len(newpw) < 6:
+            print(Fore.RED + "Password too short; min 6 chars.")
+            continue
+        s_hex, k_hex = hash_password(newpw)
+        execute_query("UPDATE Admins SET salt=?, passhash=? WHERE username=?;", (s_hex, k_hex, username), commit=True)
+        print(Fore.GREEN + "Password updated.")
+        break
+
 # ---------------------------
 # CRUD & utilities
 # ---------------------------
 def add_product():
+    validate_product(name, qty, price)
     name = input("Enter product name: ").strip()
+    if not name:
+        print(Fore.RED + "Product name required.")
+        return
     category = input("Enter category: ").strip()
     qty_s = input("Enter quantity (integer): ").strip()
-    if not qty_s.isdigit():
-        print(Fore.RED + "Invalid quantity.")
+    ok, qty = (qty_s.isdigit(), int(qty_s)) if qty_s.isdigit() else (False, None)
+    if not ok:
+        print(Fore.RED + "Invalid quantity. Use a non-negative integer.")
         return
-    qty = int(qty_s)
     try:
-        price = float(input("Enter price (e.g. 12.50): ").strip())
-    except ValueError:
-        print(Fore.RED + "Invalid price.")
+        price_s = input("Enter price (e.g. 12.50): ").strip()
+        price = float(price_s)
+        if price < 0:
+            raise ValueError()
+    except Exception:
+        print(Fore.RED + "Invalid price. Use a non-negative number.")
         return
     execute_query("INSERT OR IGNORE INTO products (name, category, qty, price) VALUES (?, ?, ?, ?);",
                   (name, category, qty, price), commit=True)
@@ -385,9 +535,17 @@ def view_customers():
         print(Fore.YELLOW + "No customers found.")
 
 def add_customer():
+    validate_customer(name, phone)
     name = input("Enter customer name: ").strip()
-    phone = input("Enter phone: ").strip()
+    if not name:
+        print(Fore.RED + "Customer name required.")
+        return
+    phone = input("Enter phone (optional): ").strip()
     email = input("Enter email (optional): ").strip()
+    # basic email validation
+    if email and "@" not in email:
+        print(Fore.RED + "Invalid email format.")
+        return
     execute_query("INSERT OR IGNORE INTO customers (name, phone, email) VALUES (?, ?, ?);", (name, phone, email), commit=True)
     print(Fore.GREEN + "Customer added (or already existed).")
 
@@ -411,15 +569,17 @@ def customer_history():
         return
     cid = int(cid_s)
     rows = execute_query("""
-        SELECT s.id, p.name, s.qty, s.total_price, s.date
-        FROM sales s JOIN products p ON s.product_id = p.id
-        WHERE s.customer_id = ?
-        ORDER BY s.date DESC;
+        SELECT i.invoice_number, i.date, p.name, s.qty, s.total_price
+        FROM invoices i
+        JOIN sales s ON s.invoice_id = i.id
+        JOIN products p ON s.product_id = p.id
+        WHERE i.customer_id = ?
+        ORDER BY i.date DESC, i.invoice_number DESC;
     """, (cid,), fetch=True) or []
     if rows:
-        print(tabulate(rows, headers=['Sale ID', 'Product', 'Qty', 'Total', 'Date'], tablefmt='psql'))
+        print(tabulate(rows, headers=["Invoice", "Date", "Product", "Qty", "Line Total"], tablefmt="psql"))
     else:
-        print(Fore.YELLOW + "No purchase history found for this customer.")
+        print(Fore.YELLOW + "No purchase history found.")
 
 def generate_receipt(customer_id, product_id, qty, total_price):
     cust = execute_query("SELECT name, phone FROM customers WHERE id = ?;", (customer_id,), fetchone=True)
@@ -450,7 +610,8 @@ def generate_receipt(customer_id, product_id, qty, total_price):
     return str(filename)
 
 def record_sale():
-    # Offer to choose customer or add
+    validate_sale_item(item)
+    # select or add customer
     view_customers()
     cid_s = input("Enter customer ID (or 0 to add new): ").strip()
     if not cid_s.isdigit():
@@ -459,50 +620,168 @@ def record_sale():
     cid = int(cid_s)
     if cid == 0:
         add_customer()
-        last = execute_query("SELECT id FROM customers ORDER BY id DESC LIMIT 1;", fetchone=True)
-        if not last:
+        res = execute_query("SELECT id FROM customers ORDER BY id DESC LIMIT 1;", fetchone=True)
+        if not res:
             print(Fore.RED + "Failed to create customer.")
             return
-        cid = last[0]
+        cid = res[0]
 
-    view_products()
-    pid_s = input("Enter product ID: ").strip()
-    if not pid_s.isdigit():
-        print(Fore.RED + "Invalid product ID.")
-        return
-    pid = int(pid_s)
-    qty_s = input("Enter quantity to sell: ").strip()
-    if not qty_s.isdigit():
-        print(Fore.RED + "Invalid quantity.")
-        return
-    qty = int(qty_s)
+    items = []
+    total_sale_amount = 0
 
-    row = execute_query("SELECT qty, price FROM products WHERE id = ?;", (pid,), fetchone=True)
-    if not row:
-        print(Fore.RED + "Product not found.")
+    print(Fore.CYAN + "\nAdd products to this sale (press ENTER with no input to finish)\n")
+
+    while True:
+        view_products()
+        pid_s = input("Enter product ID (or press ENTER to finish): ").strip()
+        if pid_s == "":
+            break
+        if not pid_s.isdigit():
+            print(Fore.RED + "Invalid product ID.")
+            continue
+
+        pid = int(pid_s)
+        qty_s = input("Enter quantity: ").strip()
+        if not qty_s.isdigit():
+            print(Fore.RED + "Invalid quantity.")
+            continue
+        qty = int(qty_s)
+
+        row = execute_query("SELECT qty, price, name FROM products WHERE id = ?;", (pid,), fetchone=True)
+        if not row:
+            print(Fore.RED + "Product not found.")
+            continue
+
+        stock, price, pname = row
+        if stock < qty:
+            print(Fore.RED + f"Not enough stock (available: {stock}).")
+            continue
+
+        line_total = qty * price
+        total_sale_amount += line_total
+
+        items.append({
+            "pid": pid,
+            "name": pname,
+            "qty": qty,
+            "price": price,
+            "line_total": line_total
+        })
+
+    if not items:
+        print(Fore.YELLOW + "No items added. Sale cancelled.")
         return
-    stock, price = row
-    if stock < qty:
-        print(Fore.RED + f"Not enough stock (available: {stock}).")
-        return
-    total_price = qty * price
-    # transaction
+
     try:
         with get_connection() as conn:
             cur = conn.cursor()
             cur.execute("BEGIN;")
-            cur.execute("INSERT INTO sales (customer_id, product_id, qty, total_price, date) VALUES (?, ?, ?, ?, ?);",
-                        (cid, pid, qty, total_price, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-            cur.execute("UPDATE products SET qty = qty - ? WHERE id = ?;", (qty, pid))
+            sale_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            for item in items:
+                cur.execute("""
+                    INSERT INTO sales (customer_id, product_id, qty, total_price, date)
+                    VALUES (?, ?, ?, ?, ?);
+                """, (cid, item["pid"], item["qty"], item["line_total"], sale_time))
+
+                cur.execute("UPDATE products SET qty = qty - ? WHERE id = ?;",
+                            (item["qty"], item["pid"]))
+
             conn.commit()
             cur.close()
-        print(Fore.GREEN + f"Sale recorded: {total_price:.2f}")
-        generate_receipt(cid, pid, qty, total_price)
-        new_stock = execute_query("SELECT qty FROM products WHERE id = ?;", (pid,), fetchone=True)[0]
-        if new_stock <= 5:
-            print(Fore.YELLOW + f"⚠️ Low stock for product ID {pid}: {new_stock} left.")
+
+        print(Fore.GREEN + f"Sale recorded. Total: {total_sale_amount:.2f}")
+        generate_multi_receipt(cid, items, total_sale_amount, sale_time)
+
     except Exception as exc:
         print(Fore.RED + f"[Sale Error] {exc}")
+
+def generate_multi_receipt(customer_id, items, total, timestamp):
+    print(Fore.CYAN + "\n=== RECEIPT ===")
+    row = execute_query("SELECT name FROM customers WHERE id = ?;", (customer_id,), fetchone=True)
+    cname = row[0] if row else "Unknown"
+
+    print(f"Customer: {cname}")
+    print(f"Date: {timestamp}")
+    print("\nItems:")
+    print("----------------------------------------")
+    for item in items:
+        print(f"{item['name']}  x{item['qty']}  @ {item['price']}  = {item['line_total']:.2f}")
+    print("----------------------------------------")
+    print(f"TOTAL: {total:.2f}")
+    print("Thank you for your purchase!\n")
+
+
+def generate_pdf_receipt(invoice_id: int) -> str:
+    from reportlab.lib.pagesizes import A4
+    # fetch invoice + customer + sales lines
+    inv = execute_query("SELECT invoice_number, customer_id, total, date FROM invoices WHERE id = ?;", (invoice_id,), fetchone=True)
+    if not inv:
+        raise RuntimeError("Invoice not found")
+    invoice_number, customer_id, total, date = inv
+    cust = execute_query("SELECT name, phone, email FROM customers WHERE id = ?;", (customer_id,), fetchone=True) or ("Unknown", "", "")
+    lines = execute_query("SELECT p.name, s.qty, s.total_price, p.price FROM sales s JOIN products p ON s.product_id = p.id WHERE s.invoice_id = ?;", (invoice_id,), fetch=True) or []
+
+    # create receipts dir if not exists
+    RECEIPTS_DIR.mkdir(exist_ok=True)
+    filename = RECEIPTS_DIR / f"invoice_{invoice_number}.pdf"
+
+    c = canvas.Canvas(str(filename), pagesize=A4)
+    width, height = A4
+    margin = 20 * mm
+    x = margin
+    y = height - margin
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(x, y, "BIZTRACK - Invoice")
+    c.setFont("Helvetica", 10)
+    y -= 12
+    c.drawString(x, y, f"Invoice #: {invoice_number}")
+    y -= 12
+    c.drawString(x, y, f"Date: {date}")
+    y -= 18
+    c.drawString(x, y, f"Customer: {cust[0]}  Phone: {cust[1] if len(cust)>1 else ''}")
+    y -= 18
+    c.drawString(x, y, "-" * 80)
+    y -= 18
+    c.drawString(x, y, f"{'Item':40} {'Qty':>5} {'Unit':>8} {'Line Total':>12}")
+    y -= 12
+    c.drawString(x, y, "-" * 80)
+    y -= 12
+
+    for (pname, qty, line_total, unit_price) in lines:
+        if y < 80:
+            c.showPage()
+            y = height - margin
+        c.drawString(x, y, f"{pname:40} {qty:>5} {unit_price:>8.2f} {line_total:>12.2f}")
+        y -= 14
+
+    y -= 10
+    c.drawString(x, y, "-" * 80)
+    y -= 18
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(x, y, f"TOTAL: {total:.2f}")
+    y -= 30
+    c.setFont("Helvetica", 9)
+    c.drawString(x, y, "Thank you for your business!")
+    c.save()
+    STATIC_RECEIPTS = Path("static/receipts")
+    STATIC_RECEIPTS.mkdir(parents=True, exist_ok=True)
+    copy2(filename, STATIC_RECEIPTS / filename.name)
+    return str(filename)
+
+def top_sellers(limit: int = 10):
+    rows = execute_query("""
+        SELECT p.id, p.name, SUM(s.qty) AS total_qty, SUM(s.total_price) AS revenue
+        FROM sales s JOIN products p ON s.product_id = p.id
+        GROUP BY p.id, p.name
+        ORDER BY total_qty DESC, revenue DESC
+        LIMIT ?;
+    """, (limit,), fetch=True) or []
+    if rows:
+        print(tabulate(rows, headers=["Product ID", "Name", "Total Sold", "Revenue"], tablefmt="psql"))
+    else:
+        print(Fore.YELLOW + "No sales data.")
 
 # ====================== PAYROLL CRUD ======================
 def add_payroll():
@@ -664,24 +943,49 @@ def export_sales_csv(filename: Optional[str] = None):
     print(Fore.GREEN + f"Exported {len(rows)} rows to {filename}")
 
 def import_sales_csv(filename: str = "sales.csv"):
-    if not Path(filename).exists():
+    path = Path(filename)
+    if not path.exists():
         print(Fore.RED + f"File not found: {filename}")
         return
-    with open(filename, newline="", encoding="utf-8") as f:
+    created = 0
+    skipped = 0
+    with path.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        created = 0
+        required = {"customer_id", "product_id", "qty", "total_price", "date"}
+        if not required.issubset(set(reader.fieldnames or [])):
+            print(Fore.RED + f"CSV missing required columns. Required: {sorted(required)}")
+            return
         with get_connection() as conn:
             cur = conn.cursor()
-            for r in reader:
+            for row in reader:
                 try:
+                    cid = int(row["customer_id"])
+                    pid = int(row["product_id"])
+                    qty = int(row["qty"])
+                    total = float(row["total_price"])
+                    date = row.get("date") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    # check existence of product & customer
+                    if not execute_query("SELECT 1 FROM customers WHERE id=?;", (cid,), fetchone=True):
+                        skipped += 1
+                        continue
+                    prow = execute_query("SELECT qty FROM products WHERE id=?;", (pid,), fetchone=True)
+                    if not prow:
+                        skipped += 1
+                        continue
+                    # insert in transaction
+                    cur.execute("BEGIN;")
                     cur.execute("INSERT INTO sales (customer_id, product_id, qty, total_price, date) VALUES (?, ?, ?, ?, ?);",
-                                (int(r["customer_id"]), int(r["product_id"]), int(r["qty"]), float(r["total_price"]), r["date"]))
+                                (cid, pid, qty, total, date))
+                    # reduce stock but don't allow negatives
+                    cur.execute("UPDATE products SET qty = MAX(qty - ?, 0) WHERE id = ?;", (qty, pid))
+                    conn.commit()
                     created += 1
-                except Exception:
+                except Exception as e:
+                    conn.rollback()
+                    skipped += 1
                     continue
-            conn.commit()
             cur.close()
-    print(Fore.GREEN + f"Imported {created} rows from {filename}")
+    print(Fore.GREEN + f"Imported {created} rows, skipped {skipped} invalid rows.")
 
 # ---------------------------
 # CLI menu
@@ -691,7 +995,7 @@ def interactive_menu():
         print(Fore.CYAN + Style.BRIGHT + "\n=== BIZTRACK PRO MENU ===")
         print("1. Add Product          | 8. Customer History      | 16. Import CSV File")
         print("2. View Products         | 9. Update Product       | 17. Export CSV File")
-        print("3. Search Products       | 10. Delete Product")
+        print("3. Search Products       | 10. Delete Product      | 18. Top sellers")
         print("4. Add Customer          | 11. Update Customer")
         print("5. View Customers        | 12. Delete Customer")
         print("6. Record Sale           | 13. Payroll → Add | View | Update | Delete")
@@ -723,8 +1027,8 @@ def interactive_menu():
             b = backup_db()
             print(Fore.GREEN + f"Backup: {b}" if b else Fore.RED + "Backup failed")
         elif choice == '15': remove_duplicates()
-        elif choice == '16': import_sales_csv()
         elif choice == '17': export_sales_csv()
+        elif choice == '18': top_sellers()
         elif choice == '0':
             print(Fore.MAGENTA + Style.BRIGHT + "\nThank you for using BizTrack PRO! 🚀")
             break
@@ -732,487 +1036,381 @@ def interactive_menu():
             print(Fore.RED + "Invalid choice!")
 
 # ---------------------------
-# Flask web app (simple)
+# Flask web app
 # ---------------------------
-def create_flask_app():
-    if not FLASK_AVAILABLE:
-        raise RuntimeError("Flask is not installed. Install with `pip install flask`")
+def create_flask_app(static_folder: str = "static"):
+    """
+    Drop-in improved Flask app for BizTrack.
 
-    app = Flask("BizTrackWeb")
-    app.secret_key = "332654767225e3936c923827c4bcbb4a"
+    Requirements:
+      - This function expects the following helpers/vars in the same module:
+         execute_query, get_connection, generate_invoice_number (optional),
+         create_invoice_and_insert_sales, generate_pdf_receipt,
+         verify_password, RECEIPTS_DIR, BACKUP_DIR, DB_FILE
+      - Uses lazy imports to avoid import-time failures.
+    """
 
-    #Simple HTML templates inline for quick demo
+    # Lazy imports
+    try:
+        from flask import Flask, jsonify, request, render_template_string, redirect, url_for, session, send_file, send_from_directory
+    except Exception as exc:
+        raise RuntimeError("Flask is not installed. Install with `pip install flask`.") from exc
+
+    from functools import wraps
+    import json
+    import secrets as _secrets
+    from datetime import datetime
+    from pathlib import Path
+
+    # App setup
+    app = Flask("BizTrackWeb", static_folder=static_folder)
+    # Use env var for secret in production & fallback for dev
+    app.secret_key = os.environ.get("BIZTRACK_SECRET", _secrets.token_hex(32))
+
+    # A minimal safe login_required decorator
+    def login_required(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            if not session.get("logged_in"):
+                return jsonify({"error": "unauthorized"}), 401 if request.is_json else redirect(url_for("login_web"))
+            return fn(*args, **kwargs)
+        return wrapper
+
+    # Inlined CSS + JS for a single-file approach (modern black theme + subtle animations)
+    # Uses Chart.js for top-sellers chart (client-side) and Fetch API for AJAX.
+    BASE_HTML = r"""
+    <!doctype html>
+    <html lang="en" data-theme="dark">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width,initial-scale=1" />
+      <title>BizTrack PRO — {{ title }}</title>
+
+      <!-- Lightweight modern fonts and icons (CDN) -->
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+      <style>
+        :root{
+          --bg: #0b0b0b;
+          --panel: rgba(255,255,255,0.03);
+          --muted: #9aa3b2;
+          --accent: #0d6efd;
+          --glass: rgba(255,255,255,0.04);
+          --success: #16a34a;
+        }
+        html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+        body{background: radial-gradient(circle at 10% 10%, rgba(13,110,253,0.06), transparent 6%),
+                        linear-gradient(180deg, rgba(255,255,255,0.01), transparent 50%), var(--bg);
+              color: #e8eef6; -webkit-font-smoothing:antialiased;}
+        .container{max-width:1150px;margin:28px auto;padding:20px;}
+        header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+        .brand{display:flex;gap:12px;align-items:center}
+        .logo{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#6610f2);box-shadow:0 8px 30px rgba(2,6,23,0.6);display:flex;align-items:center;justify-content:center;font-weight:700}
+        .brand h1{font-size:1.05rem;margin:0}
+        nav .btn{background:transparent;border:1px solid transparent;color:var(--muted);padding:8px 12px;border-radius:10px}
+        .card{background:var(--panel);border-radius:14px;padding:16px;margin-bottom:18px;box-shadow:0 6px 30px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03)}
+        .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+        .metric{padding:16px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);display:flex;flex-direction:column;align-items:flex-start;gap:8px;transition:transform 0.18s ease}
+        .metric:hover{transform:translateY(-6px)}
+        .metric .value{font-size:1.6rem;font-weight:700;color:var(--accent)}
+        .grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start}
+        table{width:100%;border-collapse:collapse;color:#cfe7ff}
+        table th, table td{padding:8px 10px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.02);font-size:0.95rem}
+        .muted{color:var(--muted);font-size:0.9rem}
+        .actions{display:flex;gap:8px;flex-wrap:wrap}
+        input,select,button,textarea{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:inherit}
+        .btn-primary{background:linear-gradient(90deg,var(--accent),#0b58d1);border:none;color:white;padding:8px 12px;border-radius:10px}
+        .small{font-size:0.85rem}
+        .muted-2{color:#8b94a0}
+        footer{margin-top:28px;text-align:center;color:var(--muted);font-size:0.9rem}
+        /* subtle floating circles */
+        .bg-circles{position:fixed;inset:0;pointer-events:none;z-index:0;mix-blend-mode:screen}
+        .circle{position:absolute;border-radius:50%;filter:blur(60px);opacity:0.12;animation:float 10s infinite alternate}
+        .c1{width:420px;height:420px;background:#0d6efd;left:-120px;top:-60px}
+        .c2{width:300px;height:300px;background:#6610f2;right:-80px;bottom:-40px}
+        @keyframes float{from{transform:translateY(-8px) scale(1)} to{transform:translateY(8px) scale(1.03)}}
+        /* responsive */
+        @media (max-width:900px){.metrics{grid-template-columns:repeat(2,1fr)} .grid{grid-template-columns:1fr}}
+        .toast{position:fixed;right:18px;bottom:18px;background:rgba(10,10,10,0.75);padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.04)}
+      </style>
+
+      <!-- Chart.js CDN for charts -->
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    </head>
+    <body>
+      <div class="bg-circles" aria-hidden="true"><div class="circle c1"></div><div class="circle c2"></div></div>
+
+      <div class="container">
+        <header>
+          <div class="brand">
+            <div class="logo">BT</div>
+            <div>
+              <h1>BizTrack <span class="muted">PRO</span></h1>
+              <div class="muted-2 small">Inventory & Sales — Dashboard</div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn" onclick="location.href='/products'">Products</button>
+            <button class="btn" onclick="location.href='/customers'">Customers</button>
+            <button class="btn" onclick="location.href='/sales'">Sales</button>
+            <button class="btn" onclick="location.href='/top-sellers'">Top sellers</button>
+            <button class="btn" onclick="location.href='/invoice/new'">New Invoice</button>
+          </div>
+        </header>
+
+        <main id="app-content">
+          <!-- content injected by server -->
+          {{ body|safe }}
+        </main>
+
+        <footer>
+          © {{ year }} BizTrack PRO — Designed for creative businesses
+        </footer>
+      </div>
+
+      <div id="toast" class="toast" style="display:none"></div>
+
+    </body>
+    </html>
+    """
+
+    # ------------------------------------------------------------------
+    # LOGIN page (GET/POST)
+    # ------------------------------------------------------------------
     LOGIN_HTML = """
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>BizTrack PRO — Admin Login</title>
-
-    <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <style>
-        body {
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: radial-gradient(circle at top, #1e1e1e, #0d0d0d);
-            color: #fff;
-            overflow: hidden;
-        }
-
-        /* floating glowing circles */
-        .glow-circle {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(80px);
-            opacity: 0.25;
-            animation: float 10s infinite ease-in-out alternate;
-        }
-
-        .circle1 { width: 350px; height: 350px; background: #0d6efd; top: -120px; left: -80px; }
-        .circle2 { width: 300px; height: 300px; background: #6610f2; bottom: -120px; right: -60px; }
-
-        @keyframes float {
-            from { transform: translateY(0px) scale(1); }
-            to   { transform: translateY(40px) scale(1.05); }
-        }
-
-        .login-card {
-            position: relative;
-            width: 380px;
-            padding: 2rem;
-            border-radius: 20px;
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(25px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
-            animation: fadeIn 0.8s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-
-        .brand-title {
-            font-size: 1.8rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .brand-title img {
-            height: 48px;
-            margin-right: 12px;
-        }
-
-        .btn-login {
-            background: linear-gradient(135deg, #0d6efd, #0b58d1);
-            border: none;
-            font-weight: bold;
-            transition: 0.2s;
-        }
-
-        .btn-login:hover {
-            opacity: 0.85;
-            transform: translateY(-2px);
-        }
-
-        .form-label {
-            font-weight: 600;
-        }
-
-        footer {
-            position: absolute;
-            bottom: 20px;
-            text-align: center;
-            width: 100%;
-            font-size: 0.9rem;
-            opacity: 0.5;
-        }
-    </style>
-</head>
-<body>
-
-<!-- Background glowing circles -->
-<div class="glow-circle circle1"></div>
-<div class="glow-circle circle2"></div>
-
-<div class="login-card">
-
-    <div class="brand-title">
-        <img src="/static/biztrack_logo.png" alt="BizTrack Logo">
-        BizTrack <span class="text-primary">PRO</span>
-    </div>
-
-    {% if error %}
-        <div class="alert alert-danger py-2 text-center">{{ error }}</div>
-    {% endif %}
-
-    <form method="POST">
-        <label class="form-label">Username</label>
-        <input type="text" class="form-control mb-3" name="username" required>
-
-        <label class="form-label">Password</label>
-        <input type="password" class="form-control mb-4" name="password" required>
-
-        <button class="btn btn-login w-100 py-2">Login</button>
-    </form>
-</div>
-
-<footer>
-    © {{ year }} BizTrack PRO — All rights reserved
-</footer>
-
-</body>
-</html>
-"""
-
-    INDEX_HTML = """
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title }} - BizTrack PRO</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <style>
-        :root { --bs-body-bg: #121212; --bs-body-color: #e0e0e0; }
-        [data-bs-theme="light"] { --bs-body-bg: #f8f9fa; --bs-body-color: #212529; }
-        body { background: var(--bs-body-bg); color: var(--bs-body-color); min-height: 100vh; padding-bottom: 3rem; }
-        .metric { 
-            background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)); 
-            border-radius: 12px; 
-            border-left: 5px solid #0d6efd; 
-            backdrop-filter: blur(10px);
-        }
-        .card {border: none; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
-        .navbar { border-radius: 16px; margin-bottom: 2rem; }
-        footer { margin-top: 4rem; text-align: center; color: var(--bs-secondary-color); }
-        .table th { position: sticky; top: 0; z-index: 10; }
-    </style>
-</head>
-<body>
-
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow mb-4">
-    <div class="container-fluid">
-        <a class="navbar-brand fw-bold d-flex align-items-center" href="/">
-    <img src="./biztrack_logo.png" alt="BizTrack PRO" style="height:40px; margin-right:10px;"></a>
-         <a href="/logout" class="btn btn-danger btn-sm ms-3">
-          <i class="bi bi-box-arrow-right"></i> Logout</a>
-        <button class="btn btn-outline-light btn-sm ms-3" onclick="document.documentElement.setAttribute('data-bs-theme', 
-            document.documentElement.getAttribute('data-bs-theme') === 'light' ? 'dark' : 'light')">
-            <i class="bi bi-sun-fill"></i>/<i class="bi bi-moon-fill"></i>
-        </button>
-    </div>
-</nav>
-
-<div class="container">
-
-    <!-- Dashboard Metrics -->
-    {% if product_count is defined %}
-    <div class="row g-4 mb-5 text-center">
-        <div class="col-6 col-md-3">
-            <div class="p-4 metric rounded shadow-sm">
-                <h2 class="display-6 fw-bold text-primary">{{ product_count }}</h2>
-                <small class="text-muted">Products</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="p-4 metric rounded shadow-sm">
-                <h2 class="display-6 fw-bold text-info">{{ customer_count }}</h2>
-                <small class="text-muted">Customers</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="p-4 metric rounded shadow-sm">
-                <h2 class="display-6 fw-bold text-warning">{{ sales_count }}</h2>
-                <small class="text-muted">Sales Records</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="p-4 metric rounded shadow-sm text-success">
-                <h2 class="display-6 fw-bold">$ {{ "%.2f"|format(total_revenue) }}</h2>
-                <small class="text-muted">Total Revenue</small>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3"><i class="bi bi-table"></i> {{ title }}</h1>
-        <div>
-            <button class="btn-group">
-                <a href="/" class="btn btn-outline-primary"><i class="bi bi-speedometer2"></i> Dashboard</a>
-                <a href="/products" class="btn btn-outline-secondary"><i class="bi bi-box"></i> Products</a>
-                <a href="/customers" class="btn btn-outline-secondary"><i class="bi bi-people"></i> Customers</a>
-                <a href="/sales" class="btn btn-outline-secondary"><i class="bi bi-cart"></i> Sales</a>
-            </div>
-        </div>
-    </div>
-
-        <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <input type="search" id="globalSearch" class="form-control w-50" placeholder="Search table..." onkeyup="filterTable()">
-            <button class="btn btn-success btn-sm" onclick="backup_db()">
-                <i class="bi bi-download"></i> Backup DB
-            </button>
-        </div>
-        <div class="card-body p-0 overflow-auto">
-            {% if table %}
-                <!-- Render pre-built HTML table (tabulate output) directly -->
-                <div class="p-3">
-                    {{ table|safe }}
-                </div>
-            {% else %}
-                <table class="table table-hover table-striped mb-0" id="dataTable">
-                    <thead class="table-dark">
-                        <tr>
-                            {% if headers %}
-                                {% for h in headers %}
-                                    <th>{{ h }}</th>
-                                {% endfor %}
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% if data %}
-                            {% for row in data %}
-                                <tr>
-                                    {% for cell in row %}
-                                        <td>{{ cell }}</td>
-                                    {% endfor %}
-                                </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="{{ headers|length if headers else 1 }}" class="text-center text-muted">No records</td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            {% endif %}
-        </div>
-    </div>
-
-
-    <footer class="mt-5">
-        <small class="text-muted">BizTrack PRO — Built with ❤️ • ©KD {{ year }}</small>
-    </footer>
-
-</div>
-
-<script>
-function filterTable() {
-    let input = document.getElementById("globalSearch");
-    let filter = input.value.toLowerCase();
-    let table = document.getElementById("dataTable");
-    let tr = table.getElementsByTagName("tr");
-    for (let i = 1; i < tr.length; i++) {
-        let txt = tr[i].textContent || tr[i].innerText;
-        tr[i].style.display = txt.toLowerCase().indexOf(filter) > -1 ? "" : "none";
-    }
-}
-
-function backup_db() {
-    if (confirm("Download database backup?")) {
-        let a = document.createElement('a');
-        a.href = "/backup";
-        a.download = "biztrack_backup_" + new Date().toISOString().slice(0,10) + ".db";
-        a.click();
-    }
-}
-
-// Auto dark/light mode based on system preference
-if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-    document.documentElement.setAttribute('data-bs-theme', 'light');
-}
-</script>
-
-</body>
-</html>
-"""
-
-# ==========================
-# WEB AUTHENTICATION LOGIC
-# ==========================
-
-    def is_logged_in():
-        return session.get("logged_in") is True
-
+      <div class="card" style="max-width:420px;margin:40px auto;">
+        <h2 style="margin:0 0 8px 0">Admin Login</h2>
+        {% if error %}<div style="color:#ffb4b4;margin-bottom:8px">{{ error }}</div>{% endif %}
+        <form method="post" action="/login">
+          <label class="small">Username</label><br/>
+          <input name="username" required /><br/><br/>
+          <label class="small">Password</label><br/>
+          <input name="password" type="password" required /><br/><br/>
+          <button class="btn-primary">Sign in</button>
+        </form>
+      </div>
+    """
 
     @app.route("/login", methods=["GET", "POST"])
     def login_web():
-    # If already logged in → send to dashboard
-        if session.get("logged_in"):
-            return redirect(url_for("index"))
-
-    # If POST → authenticate
+        error = None
         if request.method == "POST":
-            username = request.form.get("username")
-            pw = request.form.get("password")
-
-        # Fetch admin record
+            username = request.form.get("username", "").strip()
+            pw = request.form.get("password", "")
             row = execute_query("SELECT salt, passhash FROM Admins WHERE username = ?;", (username,), fetchone=True)
             if not row:
-                return render_template_string(LOGIN_HTML, error="Invalid username", year=datetime.now().year)
-
-            salt_hex, key_hex = row
-
-        # Verify password
-            if verify_password(pw, salt_hex, key_hex):
-                session["logged_in"] = True
-                session["username"] = username
-                return redirect(url_for("index"))
-
-            return render_template_string(LOGIN_HTML, error="Incorrect password", year=datetime.now().year)
-
-   # If GET → show login UI
-        return render_template_string(LOGIN_HTML, year=datetime.now().year)
+                error = "Unknown username"
+            else:
+                salt, ph = row
+                if verify_password(pw, salt, ph):
+                    session["logged_in"] = True
+                    session["username"] = username
+                    return redirect(url_for("index"))
+                error = "Invalid credentials"
+        return render_template_string(BASE_HTML, title="Login", body=LOGIN_HTML if not error else (LOGIN_HTML.replace("{{ error }}", error)), year=datetime.now().year)
 
     @app.route("/logout")
-    def logout_web():
+    def logout():
         session.clear()
         return redirect(url_for("login_web"))
 
-    @app.route('/')
+    # ------------------------------------------------------------------
+    # DASHBOARD (home)
+    # ------------------------------------------------------------------
+    @app.route("/")
+    @login_required
     def index():
-        if not is_logged_in():
-            return redirect(url_for("login_web"))
+        # counts
+        prod_count = execute_query("SELECT IFNULL(COUNT(*),0) FROM products;", fetchone=True) or (0,)
+        cust_count = execute_query("SELECT IFNULL(COUNT(*),0) FROM customers;", fetchone=True) or (0,)
+        sales_count = execute_query("SELECT IFNULL(COUNT(*),0) FROM sales;", fetchone=True) or (0,)
+        revenue = execute_query("SELECT IFNULL(SUM(total_price),0) FROM sales;", fetchone=True) or (0.0,)
 
-    # Create DB + tables if not exists
-        if not os.path.exists('DB_FILE'):
-            init_db()
+        # recent sales (limit 10)
+        recent = execute_query(
+            "SELECT s.id, IFNULL(c.name,'Unknown'), IFNULL(p.name,'Unknown'), s.qty, s.total_price, s.date FROM sales s LEFT JOIN customers c ON s.customer_id=c.id LEFT JOIN products p ON p.id=s.product_id ORDER BY s.date DESC LIMIT 10;",
+            fetch=True
+        ) or []
 
-        headers = ["Sale ID", "Customer", "Product", "Qty", "Total $", "Date"]
+        # Small inline dashboard body
+        body = f'''
+        <div class="metrics">
+          <div class="metric card"><div class="value">{prod_count[0]}</div><div class="muted">Products</div></div>
+          <div class="metric card"><div class="value">{cust_count[0]}</div><div class="muted">Customers</div></div>
+          <div class="metric card"><div class="value">{sales_count[0]}</div><div class="muted">Sales</div></div>
+          <div class="metric card"><div class="value">${float(revenue[0]):.2f}</div><div class="muted">Total revenue</div></div>
+        </div>
 
-    # Safe counts (always return 0 if table empty or error)
-        try:
-            product_count = execute_query("SELECT COUNT(*) FROM products", fetchone=True)[0]
-        except:
-            product_count = 0
+        <div class="grid">
+          <div class="card">
+            <h3 style="margin-top:0">Recent sales</h3>
+            <table>
+              <thead><tr><th>ID</th><th>Customer</th><th>Product</th><th>Qty</th><th>Total</th><th>Date</th></tr></thead>
+              <tbody>
+                {''.join('<tr>' + ''.join(f'<td>{c}</td>' for c in row) + '</tr>' for row in recent)}
+              </tbody>
+            </table>
+          </div>
 
-        try:
-            customer_count = execute_query("SELECT COUNT(*) FROM customers", fetchone=True)[0]
-        except:
-            customer_count = 0
+          <div class="card">
+            <h3 style="margin-top:0">Top sellers (live)</h3>
+            <canvas id="topChart" style="width:100%;max-height:260px"></canvas>
+            <div style="margin-top:10px"><button onclick="loadTopSellers()" class="btn-primary small">Refresh</button></div>
+          </div>
+        </div>
 
-        try:
-            total_revenue = execute_query("SELECT IFNULL(SUM(total_price), 0) FROM sales", fetchone=True)[0]
-        except:
-            total_revenue = 0.0
+        '''
 
-    # This is the query that was returning None
-        sales_rows = execute_query("""
-            SELECT s.id, c.name, p.name, s.qty, s.total_price, s.date
-            FROM sales s
-            JOIN customers c ON s.customer_id = c.id
-            JOIN products p ON s.product_id = p.id
-            ORDER BY s.date DESC LIMIT 50;
-        """, fetch=True) or []
+        return render_template_string(BASE_HTML, title="Dashboard", body=body, year=datetime.now().year)
 
-        return render_template_string(INDEX_HTML,
-        title='Dashboard',
-        headers=headers,
-        data=sales_rows,
-        product_count=product_count,
-        customer_count=customer_count,
-        sales_count=len(sales_rows),   # now safe!
-        total_revenue=total_revenue,
-        year=datetime.now().year
-    )
-    @app.route("/api/products")
-    def api_products():
-        if not is_logged_in():
-            return jsonify({"error": "Unauthorized"}), 401
-        rows = execute_query("SELECT id,name,category,qty,price FROM products ORDER BY id;", fetch=True) or []
-        data = [{"id": r[0], "name": r[1], "category": r[2], "qty": r[3], "price": r[4]} for r in rows]
-        return jsonify(data)
-
-    @app.route("/api/customers")
-    def api_customers():
-        if not is_logged_in():
-            return jsonify({"error": "Unauthorized"}), 401
-        rows = execute_query("SELECT id,name,phone,email FROM customers ORDER BY id;", fetch=True) or []
-        data = [{"id": r[0], "name": r[1], "phone": r[2], "email": r[3]} for r in rows]
-        return jsonify(data)
-
-    @app.route("/api/sales")
-    def api_sales():
-        if not is_logged_in():
-            return jsonify({"error": "Unauthorized"}), 401
-        rows = execute_query("""
-            SELECT s.id, c.name, p.name, s.qty, s.total_price, s.date
-            FROM sales s
-            LEFT JOIN customers c ON s.customer_id=c.id
-            LEFT JOIN products p ON s.product_id=p.id
-            ORDER BY s.date DESC;
-        """, fetch=True) or []
-        data = [{"id": r[0], "customer": r[1], "product": r[2], "qty": r[3], "total": r[4], "date": r[5]} for r in rows]
-        return jsonify(data)
-
-    @app.route('/dashboard')
-    def dashboard():
-        if not is_logged_in():
-            return redirect(url_for("login_web"))
-        product_count = execute_query('SELECT COUNT(*) FROM products;', fetchone=True) or []
-        customer_count = execute_query('SELECT COUNT(*) FROM customers;', fetchone=True) or []
-        sales_rows = execute_query("""
-            SELECT s.id, IFNULL(c.name,'Unknown'), IFNULL(p.name,'Unknown'), s.qty, s.total_price, s.date
-            FROM sales s LEFT JOIN customers c ON s.customer_id=c.id LEFT JOIN products p ON s.product_id=p.id
-            ORDER BY s.date DESC LIMIT 50;
-        """, fetch=True) or []
-        total_revenue = execute_query('SELECT IFNULL(SUM(total_price),0) FROM sales;', fetchone=True) or []
-        headers = ['Sale ID','Customer','Product','Qty','Total','Date']
-        return render_template_string(INDEX_HTML,
-        title='Dashboard',
-        data=sales_rows,
-        product_count=product_count,
-        customer_count=customer_count,
-        sales_count=len(sales_rows),
-        year=datetime.now().year)
-
-    @app.route('/products')
+    # ------------------------------------------------------------------
+    # PRODUCTS CRUD - pages + JSON endpoints (AJAX)
+    # ------------------------------------------------------------------
+    @app.route("/products")
+    @login_required
     def products_page():
-        if not is_logged_in():
-            return redirect(url_for("login_web"))
-        rows = execute_query("SELECT id, name, category, qty, price FROM products ORDER BY id;", fetch=True) or []
-        table = tabulate(rows, headers=["ID", "Name", "Category", "Qty", "Price"], tablefmt="html")
-        return render_template_string(INDEX_HTML, title="Products", table=table)
+        rows = execute_query("SELECT id, name, category, qty, price FROM products ORDER BY id DESC;", fetch=True) or []
+        table_html = "<div class='card'><h3>Products</h3>"
+        table_html += "<div style='margin-bottom:8px'><button onclick=\"showAddProduct()\" class='btn-primary small'>Add product</button> <button onclick=\"exportCSV()\" class='btn small'>Export CSV</button></div>"
+        table_html += "<table><thead><tr><th>ID</th><th>Name</th><th>Category</th><th>Qty</th><th>Price</th><th>Actions</th></tr></thead><tbody>"
+        for r in rows:
+            table_html += f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td>{r[4]:.2f}</td>"
+            table_html += f"<td><button onclick='editProduct({r[0]})' class='btn small'>Edit</button> <button onclick='deleteProduct({r[0]})' class='btn small'>Delete</button></td></tr>"
+        table_html += "</tbody></table></div>"
 
+        # Add modal & scripts for AJAX product add/update/delete
+        table_html += r"""
+        <div id="addProductForm" style="display:none" class="card">
+          <h4>Add / Edit Product</h4>
+          <form id="pform" onsubmit="return saveProduct(event)">
+            <input name="id" type="hidden" />
+            <label>Name</label><br/><input name="name" required /><br/>
+            <label>Category</label><br/><input name="category" /><br/>
+            <label>Qty</label><br/><input name="qty" type="number" min="0" value="0" /><br/>
+            <label>Price</label><br/><input name="price" type="number" step="0.01" min="0" value="0.00" /><br/><br/>
+            <button class="btn-primary">Save</button> <button type="button" onclick="hideAdd()">Cancel</button>
+          </form>
+        </div>
 
-    @app.route('/customers')
+        """
+
+        return render_template_string(BASE_HTML, title="Products", body=table_html, year=datetime.now().year)
+
+    # JSON endpoints for product CRUD
+    @app.route("/api/product", methods=["POST"])
+    @login_required
+    def api_add_product():
+        data = request.get_json(force=True)
+        # basic validation
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error":"name required"}), 400
+        try:
+            qty = int(data.get("qty", 0))
+            price = float(data.get("price", 0.0))
+        except Exception:
+            return jsonify({"error":"invalid qty/price"}), 400
+        category = (data.get("category") or "").strip()
+        # insert
+        try:
+            execute_query("INSERT INTO products (name, category, qty, price) VALUES (?, ?, ?, ?);", (name, category, qty, price), commit=True)
+            return jsonify({"status":"ok"})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/product/<int:pid>", methods=["GET","PUT","DELETE"])
+    @login_required
+    def api_product_detail(pid):
+        if request.method == "GET":
+            row = execute_query("SELECT id,name,category,qty,price FROM products WHERE id = ?;", (pid,), fetchone=True)
+            if not row: return jsonify({"error":"not found"}), 404
+            return jsonify({"id":row[0],"name":row[1],"category":row[2],"qty":row[3],"price":row[4]})
+        if request.method == "PUT":
+            data = request.get_json(force=True)
+            name = (data.get("name") or "").strip()
+            try:
+                qty = int(data.get("qty", 0))
+                price = float(data.get("price", 0.0))
+            except Exception:
+                return jsonify({"error":"invalid qty/price"}), 400
+            category = (data.get("category") or "").strip()
+            execute_query("UPDATE products SET name=?, category=?, qty=?, price=? WHERE id=?;", (name, category, qty, price, pid), commit=True)
+            return jsonify({"status":"ok"})
+        if request.method == "DELETE":
+            execute_query("DELETE FROM products WHERE id = ?;", (pid,), commit=True)
+            return jsonify({"status":"deleted"})
+
+    # ------------------------------------------------------------------
+    # CUSTOMERS page + JSON endpoints
+    # ------------------------------------------------------------------
+    @app.route("/customers")
+    @login_required
     def customers_page():
-        if not is_logged_in():
-            return redirect(url_for("login_web"))
-        rows = execute_query("SELECT id, name, phone, email FROM customers ORDER BY id;", fetch=True) or []
-        table = tabulate(rows, headers=["ID", "Name", "Phone", "Email"], tablefmt="html")
-        return render_template_string(INDEX_HTML, title="Customers", table=table)
+        rows = execute_query("SELECT id, name, phone, email FROM customers ORDER BY id DESC;", fetch=True) or []
+        html = "<div class='card'><h3>Customers</h3><div style='margin-bottom:8px'><button onclick=\"showAddCust()\" class='btn-primary small'>Add customer</button></div>"
+        html += "<table><thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Actions</th></tr></thead><tbody>"
+        for r in rows:
+            html += f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2] or ''}</td><td>{r[3] or ''}</td>"
+            html += f"<td><button onclick='editCust({r[0]})' class='btn small'>Edit</button> <button onclick='deleteCust({r[0]})' class='btn small'>Delete</button></td></tr>"
+        html += "</tbody></table></div>"
+        html += r"""
+        <div id="addCustForm" style="display:none" class="card">
+          <h4>Add / Edit Customer</h4>
+          <form id="cform" onsubmit="return saveCust(event)">
+            <input name="id" type="hidden" />
+            <label>Name</label><br/><input name="name" required /><br/>
+            <label>Phone</label><br/><input name="phone" /><br/>
+            <label>Email</label><br/><input name="email" type="email" /><br/><br/>
+            <button class="btn-primary">Save</button> <button type="button" onclick="hideCust()">Cancel</button>
+          </form>
+        </div>
+        """
+        return render_template_string(BASE_HTML, title="Customers", body=html, year=datetime.now().year)
 
+    @app.route("/api/customer", methods=["POST"])
+    @login_required
+    def api_add_customer():
+        data = request.get_json(force=True)
+        name = (data.get("name") or "").strip()
+        if not name: return jsonify({"error":"name required"}), 400
+        phone = (data.get("phone") or "").strip()
+        email = (data.get("email") or "").strip()
+        execute_query("INSERT INTO customers (name, phone, email) VALUES (?, ?, ?);", (name, phone or None, email or None), commit=True)
+        return jsonify({"status":"ok"})
 
-    @app.route('/sales')
+    @app.route("/api/customer/<int:cid>", methods=["GET","PUT","DELETE"])
+    @login_required
+    def api_customer_detail(cid):
+        if request.method == "GET":
+            row = execute_query("SELECT id,name,phone,email FROM customers WHERE id=?;", (cid,), fetchone=True)
+            if not row: return jsonify({"error":"not found"}), 404
+            return jsonify({"id":row[0],"name":row[1],"phone":row[2],"email":row[3]})
+        if request.method == "PUT":
+            data = request.get_json(force=True)
+            name = (data.get("name") or "").strip(); phone = (data.get("phone") or "").strip(); email = (data.get("email") or "").strip()
+            execute_query("UPDATE customers SET name=?, phone=?, email=? WHERE id=?;", (name, phone or None, email or None, cid), commit=True)
+            return jsonify({"status":"ok"})
+        if request.method == "DELETE":
+            execute_query("DELETE FROM customers WHERE id=?;", (cid,), commit=True)
+            return jsonify({"status":"deleted"})
+
+    # ------------------------------------------------------------------
+    # SALES page + API (record sale)
+    # ------------------------------------------------------------------
+    @app.route("/sales")
+    @login_required
     def sales_page():
-        if not is_logged_in():
-            return redirect(url_for("login_web"))
-        rows = execute_query("""
-            SELECT s.id, c.name, p.name, s.qty, s.total_price, s.date
-            FROM sales s
-            LEFT JOIN customers c ON s.customer_id = c.id
-            LEFT JOIN products p ON s.product_id = p.id
-            ORDER BY s.date DESC;
-        """, fetch=True) or []
-        table = tabulate(rows, headers=["ID", "Customer", "Product", "Qty", "Total $", "Date"], tablefmt="html")
-        return render_template_string(INDEX_HTML, title="Sales", table=table)
+        rows = execute_query("SELECT s.id, IFNULL(c.name,'Unknown'), IFNULL(p.name,'Unknown'), s.qty, s.total_price, s.date FROM sales s LEFT JOIN customers c ON c.id=s.customer_id LEFT JOIN products p ON p.id=s.product_id ORDER BY s.date DESC LIMIT 200;", fetch=True) or []
+        html = "<div class='card'><h3>Sales</h3>"
+        html += "<div style='margin-bottom:8px'><button onclick=\"location.href='/invoice/new'\" class='btn-primary small'>Create Invoice</button></div>"
+        html += "<table><thead><tr><th>ID</th><th>Customer</th><th>Product</th><th>Qty</th><th>Total</th><th>Date</th></tr></thead><tbody>"
+        for r in rows:
+            html += f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td>{r[4]:.2f}</td><td>{r[5]}</td></tr>"
+        html += "</tbody></table></div>"
+        return render_template_string(BASE_HTML, title="Sales", body=html, year=datetime.now().year)
 
-    # Simple API to record sale (POST JSON)
     @app.route("/api/sale", methods=["POST"])
+    @login_required
     def api_create_sale():
         payload = request.get_json(force=True)
         try:
@@ -1222,11 +1420,9 @@ if (window.matchMedia('(prefers-color-scheme: light)').matches) {
         except Exception:
             return jsonify({"error":"invalid payload"}), 400
         row = execute_query("SELECT qty,price FROM products WHERE id=?;", (pid,), fetchone=True)
-        if not row:
-            return jsonify({"error":"product not found"}), 404
+        if not row: return jsonify({"error":"product not found"}), 404
         stock, price = row
-        if stock < qty:
-            return jsonify({"error":"not enough stock", "available":stock}), 400
+        if stock < qty: return jsonify({"error":"not enough stock", "available":stock}), 400
         total_price = qty * price
         try:
             with get_connection() as conn:
@@ -1237,12 +1433,127 @@ if (window.matchMedia('(prefers-color-scheme: light)').matches) {
                 cur.execute("UPDATE products SET qty = qty - ? WHERE id = ?;", (qty,pid))
                 conn.commit()
                 cur.close()
+            # optionally return a generated textual receipt or PDF link
             generate_receipt(cid,pid,qty,total_price)
             return jsonify({"status":"ok","total":total_price}), 201
         except Exception as exc:
             return jsonify({"error":str(exc)}), 500
 
+    # ------------------------------------------------------------------
+    # INVOICE creation page + PDF download
+    # ------------------------------------------------------------------
+    @app.route("/invoice/new", methods=["GET","POST"])
+    @login_required
+    def invoice_new():
+        if request.method == "GET":
+            form = """
+            <div class="card"><h3>Create Invoice</h3>
+            <form method="post">
+              <label>Customer ID</label><br/><input name="customer_id" required /><br/>
+              <label>Items (pid:qty, comma separated)</label><br/><input name="items" style="width:100%" required /><br/><br/>
+              <button class="btn-primary">Create Invoice</button>
+            </form></div>
+            """
+            return render_template_string(BASE_HTML, title="Create Invoice", body=form, year=datetime.now().year)
+
+        # POST: parse & validate items
+        cid = int(request.form.get("customer_id") or 0)
+        items_raw = request.form.get("items","")
+        parsed = []
+        for part in items_raw.split(","):
+            part = part.strip()
+            if not part: continue
+            try:
+                pid_s, qty_s = part.split(":")
+                pid = int(pid_s.strip()); qty = int(qty_s.strip())
+            except Exception:
+                return "Invalid items format. Use product_id:qty pairs separated by commas.", 400
+            prow = execute_query("SELECT qty, price, name FROM products WHERE id = ?;", (pid,), fetchone=True)
+            if not prow: return f"Product id {pid} not found.", 400
+            stock, price, pname = prow
+            if stock < qty: return f"Not enough stock for {pname} (id {pid}). Available {stock}", 400
+            parsed.append({"pid": pid, "qty": qty, "price": price, "line_total": qty*price, "name":pname})
+
+        inv_id = create_invoice_and_insert_sales(cid, parsed)
+        if not inv_id: return "Failed to create invoice", 500
+        # generate PDF and redirect to download
+        try:
+            pdf_path = generate_pdf_receipt(inv_id)
+        except Exception as exc:
+            # continue but tell the user
+            return f"Invoice {inv_id} created, but PDF failed: {exc}", 200
+        return redirect(url_for("invoice_pdf", invoice_id=inv_id))
+
+    @app.route("/invoice/<int:invoice_id>/pdf")
+    @login_required
+    def invoice_pdf(invoice_id):
+        inv = execute_query("SELECT invoice_number FROM invoices WHERE id = ?;", (invoice_id,), fetchone=True)
+        if not inv: return "Invoice not found", 404
+        invoice_number = inv[0]
+        pdf_file = RECEIPTS_DIR / f"invoice_{invoice_number}.pdf"
+        if not pdf_file.exists():
+            try:
+                generate_pdf_receipt(invoice_id)
+            except Exception as e:
+                return f"PDF generation failed: {e}", 500
+        return send_file(str(pdf_file), as_attachment=True)
+
+    # ------------------------------------------------------------------
+    # TOP SELLERS API
+    # ------------------------------------------------------------------
+    @app.route("/api/top_sellers")
+    @login_required
+    def api_top_sellers():
+        limit = int(request.args.get("limit", "10"))
+        rows = execute_query("""
+            SELECT p.id, p.name, IFNULL(SUM(s.qty),0) AS total_qty, IFNULL(SUM(s.total_price),0) AS revenue
+            FROM products p LEFT JOIN sales s ON s.product_id = p.id
+            GROUP BY p.id, p.name
+            ORDER BY total_qty DESC, revenue DESC
+            LIMIT ?;
+        """, (limit,), fetch=True) or []
+        data = [{"id":r[0],"name":r[1],"total_sold":r[2],"revenue":r[3]} for r in rows]
+        return jsonify(data)
+
+    # ------------------------------------------------------------------
+    # Export CSV & Backup endpoints
+    # ------------------------------------------------------------------
+    @app.route("/export_sales")
+    @login_required
+    def export_sales():
+        filename = f"sales_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        rows = execute_query("SELECT id, customer_id, product_id, qty, total_price, date FROM sales ORDER BY id;", fetch=True) or []
+        import csv, io
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["id","customer_id","product_id","qty","total_price","date"])
+        w.writerows(rows)
+        buf.seek(0)
+        return app.response_class(buf.getvalue(), mimetype="text/csv",
+                                  headers={"Content-Disposition":f"attachment;filename={filename}"})
+
+    @app.route("/backup")
+    @login_required
+    def backup():
+        # attempt DB copy
+        src = Path(DB_FILE)
+        if not src.exists(): return "DB file not found", 404
+        dest = Path(BACKUP_DIR) / f"{src.stem}_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}{src.suffix}"
+        copy2(str(src), str(dest))
+        return send_file(str(dest), as_attachment=True)
+
+    # ------------------------------------------------------------------
+    # Static receipts serving (safe)
+    # ------------------------------------------------------------------
+    @app.route("/static/receipts/<path:filename>")
+    @login_required
+    def static_receipts(filename):
+        safe_dir = str(Path(RECEIPTS_DIR).resolve())
+        return send_from_directory(safe_dir, filename, as_attachment=False)
+
+    # End of app function
     return app
+
 
 # ---------------------------
 # Simple Tk GUI (minimal)
@@ -1333,6 +1644,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     if not args.no_seed:
         seed_default_data()
     remove_duplicates()
+    ensure_invoice_schema()
 
     if args.export:
         export_sales_csv(args.export)
@@ -1341,10 +1653,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     if args.web:
         if not FLASK_AVAILABLE:
             print(Fore.RED + "Flask not installed. Install `flask` to use web mode.")
+            app = create_flask_app().run(host="0.0.0.0", port=args.port, debug=False)
             return
-        app = create_flask_app()
         print(Fore.CYAN + "Starting Flask app at http://127.0.0.1:5000")
-        app.run(debug=False)
         return
 
     if args.gui:
