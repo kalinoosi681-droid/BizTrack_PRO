@@ -1,0 +1,92 @@
+<div class="card">
+  <h3>Top Sellers</h3>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div>
+      <strong>Total Units:</strong> <span id="totalUnits">0</span>
+      &nbsp;&nbsp;
+      <strong>Total Revenue:</strong> <span id="totalRevenue">$0.00</span>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="exportCSV()">Export CSV</button>
+      <button class="btn" onclick="backupDB()">Backup DB</button>
+      <button class="btn" onclick="removeDuplicates()">Remove Duplicates</button>
+      <button class="btn" onclick="seedDefaults()">Seed Defaults</button>
+    </div>
+  </div>
+  <div style="height:360px"><canvas id="topChart" style="width:100%;height:100%"></canvas></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h4>Top Sellers Table</h4>
+  <table id="topTable" style="width:100%">
+    <thead><tr><th>#</th><th>Product</th><th>Units Sold</th><th>Revenue</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+function fmtCurrency(v){ return '$' + Number(v).toFixed(2); }
+
+async function loadTopSellersChart(){
+  try{
+    const res = await fetch('/api/top_sellers');
+    const data = await res.json();
+    const labels = data.map(d => d.name);
+    const values = data.map(d => Number(d.total_sold || d.totalSold || 0));
+    const revenues = data.map(d => Number(d.revenue || 0));
+
+    // totals
+    const totalUnits = values.reduce((a,b)=>a+b,0);
+    const totalRevenue = revenues.reduce((a,b)=>a+b,0);
+    document.getElementById('totalUnits').innerText = totalUnits;
+    document.getElementById('totalRevenue').innerText = fmtCurrency(totalRevenue);
+
+    // chart
+    const ctx = document.getElementById('topChart').getContext('2d');
+    if(window._topChart) window._topChart.destroy();
+    window._topChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Units Sold', data: values, backgroundColor: 'rgba(13,110,253,0.85)' },
+          { label: 'Revenue', data: revenues, backgroundColor: 'rgba(22,163,74,0.85)', yAxisID: 'rev' }
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        scales: { rev: { type: 'linear', position: 'right', ticks:{callback: v => '$'+v} } }
+      }
+    });
+
+    // table
+    const tbody = document.querySelector('#topTable tbody');
+    tbody.innerHTML = '';
+    data.forEach((r,idx)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${idx+1}</td><td>${r.name}</td><td>${r.total_sold||0}</td><td>${fmtCurrency(r.revenue||0)}</td>`;
+      tbody.appendChild(tr);
+    });
+
+  }catch(e){ console.error('Failed to load top sellers', e); }
+}
+
+async function exportCSV(){ window.location = '/export_sales'; }
+async function backupDB(){ window.location = '/backup'; }
+
+async function removeDuplicates(){
+  if(!confirm('Remove duplicate records?')) return;
+  const r = await fetchWithCSRF('/api/remove_duplicates', {method:'POST'});
+  if(r.ok) { showToast('Duplicates removal triggered', 'success'); loadTopSellersChart(); }
+  else { const j=await r.json().catch(()=>({})); showToast(j.error||'Failed to remove duplicates','error'); }
+}
+
+async function seedDefaults(){
+  if(!confirm('Seed default product data?')) return;
+  const r = await fetchWithCSRF('/api/seed_defaults', {method:'POST'});
+  if(r.ok) { showToast('Seeded default data', 'success'); loadTopSellersChart(); }
+  else { const j=await r.json().catch(()=>({})); showToast(j.error||'Seed failed','error'); }
+}
+
+loadTopSellersChart();
+</script>
