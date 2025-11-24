@@ -70,6 +70,40 @@ except Exception:
         return hdr + body
 
 # ---------------------------
+# Structured logging
+# ---------------------------
+import logging
+
+LOG_LEVEL = os.environ.get("BIZTRACK_LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger("biztrack")
+
+def log_info(msg: str) -> None:
+    logger.info(msg)
+    try:
+        print(Fore.GREEN + msg)
+    except Exception:
+        print(msg)
+
+def log_warn(msg: str) -> None:
+    logger.warning(msg)
+    try:
+        print(Fore.YELLOW + msg)
+    except Exception:
+        print(msg)
+
+def log_error(msg: str) -> None:
+    logger.error(msg)
+    try:
+        print(Fore.RED + msg)
+    except Exception:
+        print(msg)
+
+# ---------------------------
 # Config
 # ---------------------------
 DB_FILE = os.environ.get("BIZTRACK_DB", "biztrack.db")
@@ -106,105 +140,29 @@ def send_low_stock_sms(message: str, phone: Optional[str] = None) -> bool:
         return False
 
 # ---------------------------
-# DB helpers (single-access)
+# DB helpers (single-access) — moved to `biztrack_db.py`
 # ---------------------------
+import importlib
+from biztrack_db import (
+    set_db_file as _db_set_db_file,
+    get_connection,
+    execute_query,
+    generate_invoice_number,
+    create_invoice_and_insert_sales,
+    init_db,
+    seed_default_data,
+    ensure_invoice_schema,
+    backup_db,
+    remove_duplicates,
+)
+
 def set_db_file(path: str) -> None:
+    """Wrapper to update DB file in both this module (symbol) and the db module."""
+    # Update local symbol for compatibility
     global DB_FILE
     DB_FILE = path
-
-def get_connection(db_file: Optional[str] = None) -> sqlite3.Connection:
-    global _MEMORY_CONN
-
-    path = db_file or DB_FILE
-
-    # Special handling for in-memory DB
-    if path == ":memory:":
-        if _MEMORY_CONN is None:
-            _MEMORY_CONN = sqlite3.connect(":memory:")
-            _MEMORY_CONN.execute("PRAGMA foreign_keys = ON;")
-        return _MEMORY_CONN
-
-    # Normal file-based DB
-    dirpath = os.path.dirname(os.path.abspath(path))
-    if dirpath and not os.path.exists(dirpath):
-        os.makedirs(dirpath, exist_ok=True)
-
-    conn = sqlite3.connect(path, timeout=10)
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
-
-def execute_query(query: str, params: Sequence = (), fetch: bool = False, fetchone: bool = False, commit: bool = False):
-    """
-    Execute SQL. Returns:
-      - If fetchone=True -> single row tuple or None
-      - If fetch=True -> list of rows (possibly empty)
-      - Otherwise -> last cursor (or True on commit) but typically None
-    On DB exception: returns None for fetchone, [] for fetch, and False otherwise.
-    """
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(query, params)
-            result = None
-            if fetchone:
-                result = cur.fetchone()
-            elif fetch:
-                result = cur.fetchall()
-            if commit:
-                conn.commit()
-            cur.close()
-            # Normalize to safe defaults so callers don't blow up with TypeError
-            if fetch:
-                return result if result is not None else []
-            if fetchone:
-                return result  # might be None
-            return result
-    except Exception as exc:
-        # print more detail in debug logs but do not crash the app
-        import logging
-        logger = logging.getLogger("biztrack")
-        logging.basicConfig(level=logging.INFO)
-        logger.error("DB ERROR: %s | Params: %s", query, params)
-        if fetch:
-            return []
-        if fetchone:
-            return None
-        return None
-
-def generate_invoice_number() -> str:
-    return "INV" + datetime.now().strftime("%Y%m%d%H%M%S")
-
-def create_invoice_and_insert_sales(customer_id: int, items: list, sale_time: Optional[str] = None) -> Optional[int]:
-    """
-    items: list of dicts {pid, qty, price, line_total}
-    Creates invoice row and multiple sales rows linked to invoice_id.
-    Returns invoice_id or None on error.
-    """
-    if not sale_time:
-        sale_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    invoice_number = generate_invoice_number()
-    total = sum(i["line_total"] for i in items)
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("BEGIN;")
-            cur.execute("INSERT INTO invoices (invoice_number, customer_id, total, date) VALUES (?, ?, ?, ?);",
-                        (invoice_number, customer_id, total, sale_time))
-            invoice_id = cur.lastrowid
-            # insert each line into sales with invoice_id
-            for it in items:
-                cur.execute("INSERT INTO sales (customer_id, product_id, qty, total_price, date, invoice_id) VALUES (?, ?, ?, ?, ?, ?);",
-                            (customer_id, it["pid"], it["qty"], it["line_total"], sale_time, invoice_id))
-                # decrement stock (ensure not negative)
-                cur.execute("UPDATE products SET qty = MAX(qty - ?, 0) WHERE id = ?;", (it["qty"], it["pid"]))
-            conn.commit()
-            cur.close()
-        return invoice_id
-    except Exception as exc:
-        print(Fore.RED + f"[Invoice Error] {exc}")
-        return None
-
-#--------------------------
+    # Update module-level DB_FILE
+    _db_set_db_file(path)
 
 # CENTRALIZED VALIDATORS
 
