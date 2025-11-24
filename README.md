@@ -68,32 +68,6 @@ Then navigate to http://127.0.0.1:5000/login to log in.
 ```bash
 python biztrack.py
 ```
-
-Quick Start (CLI)
-------------------
-
-Run the command-line interface (default):
-
-```
-python biztrack.py
-```
-
-Run tests:
-
-```
-python -m pip install -r requirements.txt
-python -m pytest -q
-```
-
-Run the web app locally:
-
-```
-python biztrack.py --web --port 5000
-```
-
-Notes:
-- For PDF generation install `reportlab`.
-- Optionally install `twilio` to enable SMS notifications.
 🔧 Configuration
 
 Database file: biztrack.db by default (in project root).
