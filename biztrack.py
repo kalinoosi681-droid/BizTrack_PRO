@@ -32,8 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from shutil import copy2
 from typing import Optional, Sequence, Tuple
-from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
+# ReportLab is optional — import lazily where PDFs are generated
 
 # Optional GUI / web imports
 try:
@@ -50,10 +49,25 @@ try:
 except Exception:
     TK_AVAILABLE = False
 
-from colorama import Fore, Style, init as colorama_init
-from tabulate import tabulate
+try:
+    from colorama import Fore, Style, init as colorama_init
+    colorama_init(autoreset=True)
+except Exception:
+    class _DummyANSI:
+        def __getattr__(self, name):
+            return ""
+    Fore = Style = _DummyANSI()
+    def colorama_init(*a, **k):
+        return None
 
-colorama_init(autoreset=True)
+try:
+    from tabulate import tabulate
+except Exception:
+    def tabulate(rows, headers=None, tablefmt=None, floatfmt=None):
+        # very small fallback for environments without tabulate
+        hdr = (" | ".join(headers) + "\n") if headers else ""
+        body = "\n".join(" | ".join(str(c) for c in r) for r in (rows or []))
+        return hdr + body
 
 # ---------------------------
 # Config
@@ -76,7 +90,6 @@ TWILIO_FROM = os.environ.get("TWILIO_FROM")
 MANAGER_PHONE = os.environ.get("BIZTRACK_MANAGER_PHONE")  # single manager fallback
 
 def send_low_stock_sms(message: str, phone: Optional[str] = None) -> bool:
-    from reportlab.lib.pagesizes import A4
     target = phone or MANAGER_PHONE
     if not (TWILIO_SID and TWILIO_TOKEN and TWILIO_FROM and target):
         # not configured; silently skip but log
@@ -419,7 +432,6 @@ def set_admin_password_interactive() -> None:
 
 def login() -> bool:
     from hmac import compare_digest
-    compare_digest(stored_hash, computed_hash)
     print(Fore.CYAN + Style.BRIGHT + "\n=== Admin Login ===")
     username = input("Admin username: ").strip()
     pw = getpass.getpass("Password: ")
@@ -471,7 +483,6 @@ def reset_admin_password_cli():
 # CRUD & utilities
 # ---------------------------
 def add_product():
-    validate_product(name, qty, price)
     name = input("Enter product name: ").strip()
     if not name:
         print(Fore.RED + "Product name required.")
@@ -535,7 +546,6 @@ def view_customers():
         print(Fore.YELLOW + "No customers found.")
 
 def add_customer():
-    validate_customer(name, phone)
     name = input("Enter customer name: ").strip()
     if not name:
         print(Fore.RED + "Customer name required.")
@@ -610,7 +620,6 @@ def generate_receipt(customer_id, product_id, qty, total_price):
     return str(filename)
 
 def record_sale():
-    validate_sale_item(item)
     # select or add customer
     view_customers()
     cid_s = input("Enter customer ID (or 0 to add new): ").strip()
@@ -713,7 +722,12 @@ def generate_multi_receipt(customer_id, items, total, timestamp):
 
 
 def generate_pdf_receipt(invoice_id: int) -> str:
-    from reportlab.lib.pagesizes import A4
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+    except Exception as exc:
+        raise RuntimeError("reportlab is required to generate PDFs. Install with `pip install reportlab`.") from exc
     # fetch invoice + customer + sales lines
     inv = execute_query("SELECT invoice_number, customer_id, total, date FROM invoices WHERE id = ?;", (invoice_id,), fetchone=True)
     if not inv:
@@ -1634,6 +1648,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--no-seed", action="store_true", help="Don't seed sample data")
     parser.add_argument("--web", action="store_true", help="Run Flask web app")
     parser.add_argument("--gui", action="store_true", help="Run Tkinter GUI (if available)")
+    parser.add_argument("--port", type=int, default=5000, help="Port for web server (default: 5000)")
     parser.add_argument("--export", nargs="?", const="auto_export.csv", help="Export sales CSV and exit")
     args = parser.parse_args(argv)
 
@@ -1653,9 +1668,10 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     if args.web:
         if not FLASK_AVAILABLE:
             print(Fore.RED + "Flask not installed. Install `flask` to use web mode.")
-            app = create_flask_app().run(host="0.0.0.0", port=args.port, debug=False)
             return
-        print(Fore.CYAN + "Starting Flask app at http://127.0.0.1:5000")
+        print(Fore.CYAN + f"Starting Flask app at http://127.0.0.1:{args.port}")
+        app = create_flask_app()
+        app.run(host="0.0.0.0", port=args.port, debug=False)
         return
 
     if args.gui:
