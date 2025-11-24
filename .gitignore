@@ -1,7 +1,39 @@
-biztrack.db
+# Virtualenv
+.venv/
+
+# Python
 __pycache__/
-backups/
-receipts/
 *.pyc
 *.pyo
+*.pyd
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
 .DS_Store
+
+# Databases / local files
+bizTrack.db
+*.db
+*.sqlite3
+
+# Logs / caches
+.pytest_cache/
+*.log
+
+# Generated receipts/backups
+receipts/
+backups/
+static/receipts/
+
+# Screenshots (local assets)
+Screenshots/
+
+# Environment
+.env
+
+# Build
+dist/
+build/
