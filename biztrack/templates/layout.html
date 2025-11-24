@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BizTrack PRO</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+<main>
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul class="flashes">
+        {% for category, msg in messages %}
+            <li class="{{ category }}">{{ msg }}</li>
+<nav>
+    <a href="{{ url_for('main.dashboard') }}">Dashboard</a> |
+    <a href="{{ url_for('main.products') }}">Products</a> |
+    <a href="{{ url_for('main.customers') }}">Customers</a> |
+    <a href="{{ url_for('main.invoices') }}">Invoices</a> |
+    <a href="{{ url_for('main.top_sellers') }}">Top Sellers</a> |
+    <a href="{{ url_for('main.utils') }}">Utilities</a> |
+    <a href="{{ url_for('auth.logout') }}">Logout</a>
+</nav>
+ {% endfor %}
+    </ul>
+    {% endif %}
+{% endwith %}
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>
