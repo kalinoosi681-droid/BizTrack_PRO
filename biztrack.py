@@ -1039,21 +1039,52 @@ def create_flask_app(static_folder: str = "static"):
     # Use env var for secret in production & fallback for dev
     app.secret_key = os.environ.get("BIZTRACK_SECRET", _secrets.token_hex(32))
 
+    # Basic CSRF protection for authenticated sessions: require X-CSRF-Token header
+    @app.before_request
+    def _require_csrf_for_mutation():
+        # allow login/logout and GETs without CSRF
+        if request.method in ("POST", "PUT", "DELETE") and session.get("logged_in"):
+            token = session.get("csrf_token")
+            hdr = request.headers.get("X-CSRF-Token")
+            # If token missing or mismatch, reject
+            if not token or not hdr or hdr != token:
+                return jsonify({"error": "missing or invalid CSRF token"}), 403
+
     # A minimal safe login_required decorator
     def login_required(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             if not session.get("logged_in"):
-                return jsonify({"error": "unauthorized"}), 401 if request.is_json else redirect(url_for("login_web"))
+                # If this is an API route or the request expects JSON, return JSON 401
+                if request.is_json or (request.path or "").startswith("/api"):
+                    return jsonify({"error": "unauthorized"}), 401
+                # otherwise redirect to login page
+                return redirect(url_for("login_web"))
             return fn(*args, **kwargs)
         return wrapper
 
     # Inlined CSS + JS for a single-file approach (modern black theme + subtle animations)
     # Uses Chart.js for top-sellers chart (client-side) and Fetch API for AJAX.
     BASE_HTML = r"""
-    <!doctype html>
-    <html lang="en" data-theme="dark">
+        <!doctype html>
+        <html lang="en">
     <head>
+            <script>
+                (function(){
+                    try{
+                        var t = localStorage.getItem('biztrack_theme') || 'dark';
+                        document.documentElement.setAttribute('data-theme', t);
+                    }catch(e){ }
+                })();
+                function toggleTheme(){
+                    try{
+                        var cur = document.documentElement.getAttribute('data-theme')||'dark';
+                        var next = cur==='dark' ? 'light' : 'dark';
+                        document.documentElement.setAttribute('data-theme', next);
+                        localStorage.setItem('biztrack_theme', next);
+                    }catch(e){ }
+                }
+            </script>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width,initial-scale=1" />
       <title>BizTrack PRO — {{ title }}</title>
@@ -1070,9 +1101,11 @@ def create_flask_app(static_folder: str = "static"):
           --glass: rgba(255,255,255,0.04);
           --success: #16a34a;
         }
-        html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
-        body{background: radial-gradient(circle at 10% 10%, rgba(13,110,253,0.06), transparent 6%),
-                        linear-gradient(180deg, rgba(255,255,255,0.01), transparent 50%), var(--bg);
+          html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+          /* Smooth theme transitions */
+          html, body, .container, .card { transition: background-color 320ms ease, color 320ms ease, box-shadow 320ms ease, border-color 320ms ease; }
+          body{background: radial-gradient(circle at 10% 10%, rgba(13,110,253,0.06), transparent 6%),
+                    linear-gradient(180deg, rgba(255,255,255,0.01), transparent 50%), var(--bg);
               color: #e8eef6; -webkit-font-smoothing:antialiased;}
         .container{max-width:1150px;margin:28px auto;padding:20px;}
         header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
@@ -1104,10 +1137,51 @@ def create_flask_app(static_folder: str = "static"):
         /* responsive */
         @media (max-width:900px){.metrics{grid-template-columns:repeat(2,1fr)} .grid{grid-template-columns:1fr}}
         .toast{position:fixed;right:18px;bottom:18px;background:rgba(10,10,10,0.75);padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.04)}
+        /* Theme toggle icon styles */
+        #themeToggle{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px}
+        .theme-icon{width:20px;height:20px;display:inline-block;position:relative}
+        .theme-icon svg{position:absolute;inset:0;width:20px;height:20px;transition:transform 320ms ease,opacity 220ms ease}
+        .theme-icon .sun{opacity:0;transform:scale(.8) rotate(-14deg)}
+        .theme-icon .moon{opacity:1;transform:scale(1) rotate(0deg)}
+        [data-theme="light"] .theme-icon .sun{opacity:1;transform:scale(1) rotate(0deg)}
+        [data-theme="light"] .theme-icon .moon{opacity:0;transform:scale(.8) rotate(14deg)}
       </style>
+
+            <!-- Light theme overrides -->
+            <style>
+                [data-theme="light"]{
+                    --bg: #f6f8fb;
+                    --panel: rgba(0,0,0,0.04);
+                    --muted: #6b7280;
+                    --accent: #0d6efd;
+                    --glass: rgba(0,0,0,0.03);
+                    --success: #16a34a;
+                    color: #0b0b0b;
+                }
+                [data-theme="light"] .card{background:var(--panel);color:inherit}
+                [data-theme="light"] .logo{box-shadow:0 6px 20px rgba(2,6,23,0.06)}
+                [data-theme="light"] .toast{background:rgba(255,255,255,0.9);color:#111;border:1px solid rgba(0,0,0,0.04)}
+            </style>
 
       <!-- Chart.js CDN for charts -->
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+                // expose CSRF token and toast helper to all pages
+                window._csrf = "{{ session.get('csrf_token','') }}";
+                function showToast(msg, kind='info'){
+                    try{
+                        const el = document.getElementById('toast');
+                        el.style.display = 'block';
+                        el.style.background = kind==='error'? 'rgba(140,20,20,0.9)': (kind==='success'? 'rgba(16,163,74,0.9)': 'rgba(10,10,10,0.85)');
+                        el.innerText = msg;
+                        setTimeout(()=>{ el.style.display='none'; }, 3500);
+                    }catch(e){ console.log('toast', e, msg); }
+                }
+                async function fetchWithCSRF(url, opts={}){
+                    opts.headers = Object.assign({}, opts.headers || {}, {'X-CSRF-Token': window._csrf, 'Content-Type': 'application/json'});
+                    return fetch(url, opts);
+                }
+            </script>
     </head>
     <body>
       <div class="bg-circles" aria-hidden="true"><div class="circle c1"></div><div class="circle c2"></div></div>
@@ -1121,13 +1195,24 @@ def create_flask_app(static_folder: str = "static"):
               <div class="muted-2 small">Inventory & Sales — Dashboard</div>
             </div>
           </div>
-          <div class="actions">
-            <button class="btn" onclick="location.href='/products'">Products</button>
-            <button class="btn" onclick="location.href='/customers'">Customers</button>
-            <button class="btn" onclick="location.href='/sales'">Sales</button>
-            <button class="btn" onclick="location.href='/top-sellers'">Top sellers</button>
-            <button class="btn" onclick="location.href='/invoice/new'">New Invoice</button>
-          </div>
+                    <div class="actions">
+                        <button class="btn" onclick="location.href='/products'">Products</button>
+                        <button class="btn" onclick="location.href='/customers'">Customers</button>
+                        <button class="btn" onclick="location.href='/sales'">Sales</button>
+                        <button class="btn" onclick="location.href='/top-sellers'">Top sellers</button>
+                        <button class="btn" onclick="location.href='/invoice/new'">New Invoice</button>
+                        {% if session.get('logged_in') %}
+                            <button class="btn" onclick="location.href='/logout'">Logout</button>
+                        {% else %}
+                            <button class="btn" onclick="location.href='/login'">Login</button>
+                        {% endif %}
+                        <button class="btn" id="themeToggle" aria-label="Toggle theme" onclick="toggleTheme()">
+                            <span class="theme-icon" aria-hidden="true">
+                                <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+                                <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                            </span>
+                        </button>
+                    </div>
         </header>
 
         <main id="app-content">
@@ -1177,6 +1262,8 @@ def create_flask_app(static_folder: str = "static"):
                 if verify_password(pw, salt, ph):
                     session["logged_in"] = True
                     session["username"] = username
+                    # assign a CSRF token for the authenticated session
+                    session["csrf_token"] = _secrets.token_hex(16)
                     return redirect(url_for("index"))
                 error = "Invalid credentials"
         return render_template_string(BASE_HTML, title="Login", body=LOGIN_HTML if not error else (LOGIN_HTML.replace("{{ error }}", error)), year=datetime.now().year)
@@ -1250,21 +1337,12 @@ def create_flask_app(static_folder: str = "static"):
             table_html += f"<td><button onclick='editProduct({r[0]})' class='btn small'>Edit</button> <button onclick='deleteProduct({r[0]})' class='btn small'>Delete</button></td></tr>"
         table_html += "</tbody></table></div>"
 
-        # Add modal & scripts for AJAX product add/update/delete
-        table_html += r"""
-        <div id="addProductForm" style="display:none" class="card">
-          <h4>Add / Edit Product</h4>
-          <form id="pform" onsubmit="return saveProduct(event)">
-            <input name="id" type="hidden" />
-            <label>Name</label><br/><input name="name" required /><br/>
-            <label>Category</label><br/><input name="category" /><br/>
-            <label>Qty</label><br/><input name="qty" type="number" min="0" value="0" /><br/>
-            <label>Price</label><br/><input name="price" type="number" step="0.01" min="0" value="0.00" /><br/><br/>
-            <button class="btn-primary">Save</button> <button type="button" onclick="hideAdd()">Cancel</button>
-          </form>
-        </div>
-
-        """
+        # append product fragment from template to avoid large inline strings
+        try:
+            frag = Path("templates") / "products_fragment.html"
+            table_html += frag.read_text(encoding="utf-8")
+        except Exception:
+            table_html += "<script>console.warn('products fragment missing')</script>"
 
         return render_template_string(BASE_HTML, title="Products", body=table_html, year=datetime.now().year)
 
@@ -1337,6 +1415,15 @@ def create_flask_app(static_folder: str = "static"):
           </form>
         </div>
         """
+        # client-side JS for customer CRUD
+        # append client-side fragment from template to avoid huge inline strings
+        try:
+            frag = Path("templates") / "customers_fragment.html"
+            html += frag.read_text(encoding="utf-8")
+        except Exception:
+            # fallback: include a minimal script block
+            html += "<script>function showAddCust(){document.getElementById('addCustForm').style.display='block';}</script>"
+
         return render_template_string(BASE_HTML, title="Customers", body=html, year=datetime.now().year)
 
     @app.route("/api/customer", methods=["POST"])
@@ -1473,6 +1560,17 @@ def create_flask_app(static_folder: str = "static"):
     # ------------------------------------------------------------------
     # TOP SELLERS API
     # ------------------------------------------------------------------
+    @app.route("/top-sellers")
+    @login_required
+    def top_sellers_page():
+        # Load the large HTML/JS fragment from a template file to avoid indentation issues
+        try:
+            tpl_path = Path("templates") / "top_sellers.html"
+            body = tpl_path.read_text(encoding="utf-8")
+        except Exception:
+            body = '<div class="card"><h3>Top sellers</h3><p>Template not found.</p></div>'
+        return render_template_string(BASE_HTML, title="Top sellers", body=body, year=datetime.now().year)
+
     @app.route("/api/top_sellers")
     @login_required
     def api_top_sellers():
@@ -1486,6 +1584,24 @@ def create_flask_app(static_folder: str = "static"):
         """, (limit,), fetch=True) or []
         data = [{"id":r[0],"name":r[1],"total_sold":r[2],"revenue":r[3]} for r in rows]
         return jsonify(data)
+
+    @app.route('/api/remove_duplicates', methods=['POST'])
+    @login_required
+    def api_remove_duplicates():
+        try:
+            remove_duplicates()
+            return jsonify({'status':'ok'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/seed_defaults', methods=['POST'])
+    @login_required
+    def api_seed_defaults():
+        try:
+            seed_default_data()
+            return jsonify({'status':'ok'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
     # ------------------------------------------------------------------
     # Export CSV & Backup endpoints
@@ -1597,55 +1713,16 @@ def run_tk_gui():
     refresh_products()
     root.mainloop()
 
-# ---------------------------
-# Entrypoint CLI wrapper
-# ---------------------------
+# Entrypoint: delegate CLI behavior to `cli.py`
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    parser = argparse.ArgumentParser(description="BizTrack — All-in-one tool")
-    parser.add_argument("--db", help="Path to DB file", default=None)
-    parser.add_argument("--no-seed", action="store_true", help="Don't seed sample data")
-    parser.add_argument("--web", action="store_true", help="Run Flask web app")
-    parser.add_argument("--gui", action="store_true", help="Run Tkinter GUI (if available)")
-    parser.add_argument("--port", type=int, default=5000, help="Port for web server (default: 5000)")
-    parser.add_argument("--export", nargs="?", const="auto_export.csv", help="Export sales CSV and exit")
-    args = parser.parse_args(argv)
+    # keep a thin wrapper so importing `biztrack` still exposes `main`
+    try:
+        from cli import main as cli_main
+    except Exception:
+        # Fallback: if cli cannot be imported, raise an informative error
+        raise
+    return cli_main(argv)
 
-    if args.db:
-        set_db_file(args.db)
-
-    init_db()
-    if not args.no_seed:
-        seed_default_data()
-    remove_duplicates()
-    ensure_invoice_schema()
-
-    if args.export:
-        export_sales_csv(args.export)
-        return
-
-    if args.web:
-        if not FLASK_AVAILABLE:
-            print(Fore.RED + "Flask not installed. Install `flask` to use web mode.")
-            return
-        print(Fore.CYAN + f"Starting Flask app at http://127.0.0.1:{args.port}")
-        app = create_flask_app()
-        app.run(host="0.0.0.0", port=args.port, debug=False)
-        return
-
-    if args.gui:
-        run_tk_gui()
-        return
-
-    # CLI admin and menu
-    if not admin_exists():
-        print(Fore.YELLOW + "No admin account found — create one now.")
-        set_admin_password_interactive()
-
-    if not login():
-        print(Fore.RED + "Exiting (failed login).")
-        sys.exit(1)
-
-    interactive_menu()
 
 if __name__ == "__main__":
     try:
