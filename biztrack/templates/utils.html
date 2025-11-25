@@ -1,10 +1,24 @@
 {% extends "layout.html" %}
 {% block content %}
-<h2>Utilities</h2>
-
-<form method="post">
-    <button name="action" value="dedupe">Remove Duplicates</button>
-    <button name="action" value="backup">Backup Database</button>
+<h2>Utilities - Execute CLI Commands</h2>
+<form id="cli-form">
+    <input type="text" id="command" placeholder="Enter CLI command..." style="width:80%; padding:8px;">
+    <button type="submit">Execute</button>
 </form>
 
+<div id="cli-output" style="margin-top:20px; white-space:pre-wrap; background:#1f1f1f; padding:15px; border-radius:6px;"></div>
+
+<script>
+document.getElementById('cli-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const cmd = document.getElementById('command').value;
+    const res = await fetch("{{ url_for('main.cli_command') }}", {
+        method:"POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({command: cmd})
+    });
+    const data = await res.json();
+    document.getElementById('cli-output').textContent = data.output;
+});
+</script>
 {% endblock %}

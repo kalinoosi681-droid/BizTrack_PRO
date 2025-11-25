@@ -258,3 +258,44 @@ def seed_default_data() -> None:
     except Exception as exc:
         logger.exception("Failed to seed default product data")
 
+# ----------------------------
+# Web route helper functions
+# ----------------------------
+def get_products() -> list[dict]:
+    rows = execute_query("SELECT * FROM products;", fetch=True)
+    return [dict(zip([column[0] for column in get_connection().cursor().execute("PRAGMA table_info(products)")], row)) for row in rows]
+
+def get_customers() -> list[dict]:
+    rows = execute_query("SELECT * FROM customers;", fetch=True)
+    return [dict(zip([column[0] for column in get_connection().cursor().execute("PRAGMA table_info(customers)")], row)) for row in rows]
+
+def get_invoices() -> list[dict]:
+    rows = execute_query("SELECT * FROM invoices;", fetch=True)
+    return [dict(zip([column[0] for column in get_connection().cursor().execute("PRAGMA table_info(invoices)")], row)) for row in rows]
+
+def get_top_sellers() -> list[dict]:
+    rows = execute_query("""
+        SELECT product_id, SUM(qty) as total_sold
+        FROM sales
+        GROUP BY product_id
+        ORDER BY total_sold DESC
+        LIMIT 5;
+    """, fetch=True)
+    return [{"product_id": r[0], "total_sold": r[1]} for r in rows]
+
+def get_utilities() -> list[dict]:
+    # Example placeholder: returns backups and duplicates info
+    return [{"name": "Backup Database"}, {"name": "Remove Duplicates"}]
+
+def execute_command(command: str) -> str:
+    # Basic CLI command executor
+    try:
+        if command.lower() == "backup":
+            return backup_db() or "Backup failed"
+        elif command.lower() == "remove_duplicates":
+            remove_duplicates()
+            return "Duplicates removed successfully"
+        else:
+            return f"Unknown command: {command}"
+    except Exception as e:
+        return f"Command execution error: {e}"

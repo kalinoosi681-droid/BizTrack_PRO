@@ -1,22 +1,26 @@
 {% extends "layout.html" %}
 {% block content %}
 <h2>Products</h2>
-<form method="post">
-    Name: <input type="text" name="name" required>
-    Category: <input type="text" name="category">
-    Qty: <input type="number" name="qty" required>
-    Price: <input type="number" step="0.01" name="price" required>
-    <button type="submit">Add Product</button>
-</form>
-
-<h3>Existing Products</h3>
-<table>
-    <tr><th>Name</th><th>Category</th><th>Qty</th><th>Price</th><th>Action</th></tr>
-    {% for p in products %}
-    <tr>
-        <td>{{ p[1] }}</td><td>{{ p[2] }}</td><td>{{ p[3] }}</td><td>{{ p[4] }}</td>
-        <td><a href="{{ url_for('main.delete_product', pid=p[0]) }}">Delete</a></td>
-    </tr>
-    {% endfor %}
+<table class="styled-table">
+    <thead>
+        <tr><th>ID</th><th>Name</th><th>Price</th><th>Stock</th></tr>
+    </thead>
+    <tbody>
+        {% for product in products %}
+        <tr>
+            <td>{{ product.id }}</td>
+            <td>{{ product.name }}</td>
+            <td>{{ product.price }}</td>
+            <td>{{ product.stock }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
 </table>
+
+<style>
+.styled-table { width:100%; border-collapse:collapse; margin-top:20px; }
+.styled-table th, .styled-table td { padding:12px 15px; border-bottom:1px solid #333; text-align:left; }
+.styled-table th { background:#1f1f1f; }
+.styled-table tr:hover { background:#2c2c2c; }
+</style>
 {% endblock %}
