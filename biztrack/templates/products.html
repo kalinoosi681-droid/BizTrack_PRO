@@ -1,26 +1,43 @@
 {% extends "layout.html" %}
 {% block content %}
 <h2>Products</h2>
-<table class="styled-table">
+<form id="product-form" method="POST">
+    <input type="hidden" name="action" value="add">
+    <input type="text" name="name" placeholder="Product Name" required>
+    <input type="text" name="category" placeholder="Category">
+    <input type="number" name="qty" placeholder="Quantity" min="0" required>
+    <input type="number" step="0.01" name="price" placeholder="Price" min="0" required>
+    <button type="submit">Add Product</button>
+</form>
+
+<table>
     <thead>
-        <tr><th>ID</th><th>Name</th><th>Price</th><th>Stock</th></tr>
+        <tr>
+            <th>ID</th><th>Name</th><th>Category</th><th>Qty</th><th>Price</th><th>Actions</th>
+        </tr>
     </thead>
     <tbody>
-        {% for product in products %}
+        {% for p in products %}
         <tr>
-            <td>{{ product.id }}</td>
-            <td>{{ product.name }}</td>
-            <td>{{ product.price }}</td>
-            <td>{{ product.stock }}</td>
+            <td>{{ p.id }}</td>
+            <td>{{ p.name }}</td>
+            <td>{{ p.category }}</td>
+            <td>{{ p.qty }}</td>
+            <td>{{ p.price }}</td>
+            <td>
+                <form style="display:inline" method="POST">
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="id" value="{{ p.id }}">
+                    <button type="submit">Update</button>
+                </form>
+                <form style="display:inline" method="POST">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" value="{{ p.id }}">
+                    <button type="submit" onclick="return confirm('Delete this product?')">Delete</button>
+                </form>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
-
-<style>
-.styled-table { width:100%; border-collapse:collapse; margin-top:20px; }
-.styled-table th, .styled-table td { padding:12px 15px; border-bottom:1px solid #333; text-align:left; }
-.styled-table th { background:#1f1f1f; }
-.styled-table tr:hover { background:#2c2c2c; }
-</style>
 {% endblock %}

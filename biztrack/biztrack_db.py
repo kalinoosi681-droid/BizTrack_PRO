@@ -287,15 +287,182 @@ def get_utilities() -> list[dict]:
     # Example placeholder: returns backups and duplicates info
     return [{"name": "Backup Database"}, {"name": "Remove Duplicates"}]
 
-def execute_command(command: str) -> str:
-    # Basic CLI command executor
+# ----------------------------
+# Product CRUD
+# ----------------------------
+def add_product(name: str, category: str, qty: int, price: float) -> bool:
     try:
-        if command.lower() == "backup":
-            return backup_db() or "Backup failed"
-        elif command.lower() == "remove_duplicates":
-            remove_duplicates()
-            return "Duplicates removed successfully"
-        else:
-            return f"Unknown command: {command}"
+        execute_query(
+            "INSERT INTO products (name, category, qty, price) VALUES (?, ?, ?, ?);",
+            (name, category, qty, price),
+            commit=True
+        )
+        return True
     except Exception as e:
-        return f"Command execution error: {e}"
+        logger.error(f"Failed to add product: {e}")
+        return False
+
+def update_product(pid: int, name: str, category: str, qty: int, price: float) -> bool:
+    try:
+        execute_query(
+            "UPDATE products SET name=?, category=?, qty=?, price=? WHERE id=?;",
+            (name, category, qty, price, pid),
+            commit=True
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update product: {e}")
+        return False
+
+def delete_product(pid: int) -> bool:
+    try:
+        execute_query(
+            "DELETE FROM products WHERE id=?;",
+            (pid,),
+            commit=True
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete product: {e}")
+        return False
+
+
+# ----------------------------
+# Customer CRUD
+# ----------------------------
+def add_customer(name: str, phone: str, email: str) -> bool:
+    try:
+        execute_query(
+            "INSERT INTO customers (name, phone, email) VALUES (?, ?, ?);",
+            (name, phone, email),
+            commit=True
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to add customer: {e}")
+        return False
+
+def update_customer(cid: int, name: str, phone: str, email: str) -> bool:
+    try:
+        execute_query(
+            "UPDATE customers SET name=?, phone=?, email=? WHERE id=?;",
+            (name, phone, email, cid),
+            commit=True
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update customer: {e}")
+        return False
+
+def delete_customer(cid: int) -> bool:
+    try:
+        execute_query(
+            "DELETE FROM customers WHERE id=?;",
+            (cid,),
+            commit=True
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete customer: {e}")
+        return False
+# -----------------------
+
+# ----------------------------
+# Sales / Invoices
+# ----------------------------
+def record_sale(customer_id: int, items: List[Dict]) -> Optional[int]:
+    """
+    items: List of dicts [{pid: int, qty: int, price: float}, ...]
+    Returns invoice_id or None if failed
+    """
+    return create_invoice_and_insert_sales(customer_id, items)
+
+def delete_sale(sale_id: int) -> bool:
+    try:
+        execute_query(
+            "DELETE FROM sales WHERE id=?;",
+            (sale_id,),
+            commit=True
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete sale: {e}")
+        return False
+
+def get_sale_details(invoice_id: int) -> list[dict]:
+    rows = execute_query(
+        "SELECT * FROM sales WHERE invoice_id=?;",
+        (invoice_id,),
+        fetch=True
+    )
+    columns = [column[0] for column in get_connection().cursor().execute("PRAGMA table_info(sales)")]
+    return [dict(zip(columns, row)) for row in rows]
+# -----------------------
+# -----------------------
+# Command Execution
+# Make it admin-only with strict whitelisting
+def execute_command(command: str, admin_user_id: int = None) -> dict:
+    """
+    DANGEROUS: Only use with strict validation
+    Returns: {"success": bool, "output": str, "error": str|None}
+    """
+    if not admin_user_id:
+        return {
+            "success": False,
+            "output": "",
+            "error": "Unauthorized: Admin access required"
+        }
+    
+    try:
+        if not command.strip():
+            return {"success": False, "output": "", "error": "No command provided"}
+        
+        parts = command.strip().split(maxsplit=1)
+        cmd = parts[0].lower()
+        
+        # STRICT WHITELIST - only these exact commands allowed
+        allowed_commands = {'backup', 'dedupe', 'stats', 'health'}
+        
+        if cmd not in allowed_commands:
+            return {
+                "success": False,
+                "output": "",
+                "error": f"Command '{cmd}' not allowed. Allowed: {', '.join(allowed_commands)}"
+            }
+        
+        # Execute whitelisted commands
+        if cmd == "backup":
+            path = backup_db()
+            return {
+                "success": bool(path),
+                "output": f"Backup created: {path}" if path else "",
+                "error": None if path else "Backup failed"
+            }
+        
+        elif cmd == "dedupe":
+            remove_duplicates()
+            return {"success": True, "output": "Duplicates removed", "error": None}
+        
+        elif cmd == "stats":
+            product_count = execute_query("SELECT COUNT(*) FROM products;", fetchone=True)[0]
+            customer_count = execute_query("SELECT COUNT(*) FROM customers;", fetchone=True)[0]
+            invoice_count = execute_query("SELECT COUNT(*) FROM invoices;", fetchone=True)[0]
+            
+            return {
+                "success": True,
+                "output": f"Products: {product_count}, Customers: {customer_count}, Invoices: {invoice_count}",
+                "error": None
+            }
+        
+        elif cmd == "health":
+            try:
+                execute_query("SELECT 1;", fetchone=True)
+                return {"success": True, "output": "Database: OK", "error": None}
+            except Exception as e:
+                return {"success": False, "output": "", "error": f"Database error: {e}"}
+        
+    except Exception as e:
+        logger.exception("Command execution error")
+        return {"success": False, "output": "", "error": str(e)}
+
+# -----------------------

@@ -1,17 +1,39 @@
 {% extends "layout.html" %}
 {% block content %}
 <h2>Customers</h2>
-<table class="styled-table">
+<form id="customer-form" method="POST">
+    <input type="hidden" name="action" value="add">
+    <input type="text" name="name" placeholder="Customer Name" required>
+    <input type="text" name="phone" placeholder="Phone">
+    <input type="email" name="email" placeholder="Email">
+    <button type="submit">Add Customer</button>
+</form>
+
+<table>
     <thead>
-        <tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th></tr>
+        <tr>
+            <th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Actions</th>
+        </tr>
     </thead>
     <tbody>
-        {% for customer in customers %}
+        {% for c in customers %}
         <tr>
-            <td>{{ customer.id }}</td>
-            <td>{{ customer.name }}</td>
-            <td>{{ customer.email }}</td>
-            <td>{{ customer.phone }}</td>
+            <td>{{ c.id }}</td>
+            <td>{{ c.name }}</td>
+            <td>{{ c.phone }}</td>
+            <td>{{ c.email }}</td>
+            <td>
+                <form style="display:inline" method="POST">
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="id" value="{{ c.id }}">
+                    <button type="submit">Update</button>
+                </form>
+                <form style="display:inline" method="POST">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" value="{{ c.id }}">
+                    <button type="submit" onclick="return confirm('Delete this customer?')">Delete</button>
+                </form>
+            </td>
         </tr>
         {% endfor %}
     </tbody>

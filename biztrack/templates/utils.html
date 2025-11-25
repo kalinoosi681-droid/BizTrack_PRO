@@ -1,24 +1,31 @@
 {% extends "layout.html" %}
 {% block content %}
-<h2>Utilities - Execute CLI Commands</h2>
-<form id="cli-form">
-    <input type="text" id="command" placeholder="Enter CLI command..." style="width:80%; padding:8px;">
-    <button type="submit">Execute</button>
-</form>
+<h2>Utilities</h2>
+<ul>
+    {% for u in utilities %}
+    <li>{{ u.name }}</li>
+    {% endfor %}
+</ul>
 
-<div id="cli-output" style="margin-top:20px; white-space:pre-wrap; background:#1f1f1f; padding:15px; border-radius:6px;"></div>
+<h3>Run CLI Command</h3>
+<form id="cli-form">
+    <input type="text" name="command" id="command" placeholder="Enter command">
+    <button type="submit">Run</button>
+</form>
+<pre id="cli-output"></pre>
 
 <script>
-document.getElementById('cli-form').addEventListener('submit', async (e) => {
+document.getElementById("cli-form").addEventListener("submit", async function(e){
     e.preventDefault();
-    const cmd = document.getElementById('command').value;
-    const res = await fetch("{{ url_for('main.cli_command') }}", {
-        method:"POST",
+    const cmd = document.getElementById("command").value;
+    const res = await fetch("{{url_for('run_command')}}""
+
+        method: "POST",
         headers: {"Content-Type":"application/json"},
         body: JSON.stringify({command: cmd})
     });
     const data = await res.json();
-    document.getElementById('cli-output').textContent = data.output;
+    document.getElementById("cli-output").textContent = data.output;
 });
 </script>
 {% endblock %}

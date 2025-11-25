@@ -1,17 +1,27 @@
 {% extends "layout.html" %}
 {% block content %}
 <h2>Invoices</h2>
-<table class="styled-table">
+<form id="invoice-form" method="POST">
+    <label for="customer_id">Customer ID:</label>
+    <input type="number" name="customer_id" placeholder="Customer ID" required>
+    <textarea name="items[]" placeholder='Items JSON [{"pid":1,"qty":2,"price":5.0}]' required></textarea>
+    <button type="submit">Record Sale</button>
+</form>
+
+<table>
     <thead>
-        <tr><th>ID</th><th>Customer</th><th>Total</th><th>Date</th></tr>
+        <tr>
+            <th>ID</th><th>Invoice Number</th><th>Customer ID</th><th>Total</th><th>Date</th>
+        </tr>
     </thead>
     <tbody>
-        {% for invoice in invoices %}
+        {% for i in invoices %}
         <tr>
-            <td>{{ invoice.id }}</td>
-            <td>{{ invoice.customer_name }}</td>
-            <td>{{ invoice.total }}</td>
-            <td>{{ invoice.date }}</td>
+            <td>{{ i.id }}</td>
+            <td>{{ i.invoice_number }}</td>
+            <td>{{ i.customer_id }}</td>
+            <td>{{ i.total }}</td>
+            <td>{{ i.date }}</td>
         </tr>
         {% endfor %}
     </tbody>
