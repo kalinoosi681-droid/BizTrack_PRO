@@ -9,7 +9,7 @@ def create_app():
     Flask application factory.
     Initializes app, registers blueprints, sets up DB.
     """
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder='templates')
     app.secret_key = "supersecretkey"  # Replace in production
 
     # Register blueprints
