@@ -1,5 +1,5 @@
 import pytest
-from biztrack import init_db, execute_query, set_db_file
+from biztrack.biztrack_db import set_db_file, init_db, execute_query
 
 # Use in-memory DB — super fast, no file left behind
 set_db_file(":memory:")

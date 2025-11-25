@@ -1,7 +1,18 @@
-biztrack.db
+# Python environments
+venv/
+env/
+.venv/
+
+# Cache
 __pycache__/
-backups/
-receipts/
 *.pyc
-*.pyo
-.DS_Store
+
+# Installed libraries
+twilio/
+
+# OS junk
+*.log
+
+biztrack.db
+*.csv
+biztrack_db

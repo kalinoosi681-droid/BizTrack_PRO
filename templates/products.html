@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Products</h2>
+<form method="post">
+    Name: <input type="text" name="name" required>
+    Category: <input type="text" name="category">
+    Qty: <input type="number" name="qty" required>
+    Price: <input type="number" step="0.01" name="price" required>
+    <button type="submit">Add Product</button>
+</form>
+
+<h3>Existing Products</h3>
+<table>
+    <tr><th>Name</th><th>Category</th><th>Qty</th><th>Price</th><th>Action</th></tr>
+    {% for p in products %}
+    <tr>
+        <td>{{ p[1] }}</td><td>{{ p[2] }}</td><td>{{ p[3] }}</td><td>{{ p[4] }}</td>
+        <td><a href="{{ url_for('main.delete_product', pid=p[0]) }}">Delete</a></td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
