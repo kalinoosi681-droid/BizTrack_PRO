@@ -3,7 +3,7 @@ from flask import Flask, jsonify
 from biztrack.biztrack_db import execute_query
 
 def create_flask_app():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder='templates')
 
     @app.route("/")
     def home():
