@@ -1,119 +1,97 @@
-# biztrack/routes.py
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
-from biztrack_db import execute_query, insert_invoice_and_sales
-from functools import wraps
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BizTrack PRO - Routes</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Minimal override for table/CLI area */
+        .cli-container {
+            background-color: #1e1e2f;
+            color: #cfd8dc;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: monospace;
+            margin-top: 1rem;
+        }
+        .cli-input {
+            width: 100%;
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid #555;
+            background-color: #2a2a3a;
+            color: #cfd8dc;
+        }
+        .cli-output {
+            margin-top: 1rem;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .dark-mode-toggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<button class="dark-mode-toggle" onclick="toggleDarkMode()">🌙</button>
+<main>
+    <h1>Routes / CLI</h1>
+    <p>Enter a command below and press Enter:</p>
 
-main_bp = Blueprint("main", __name__, template_folder="templates")
+    <div class="cli-container">
+        <input type="text" id="cliCommand" class="cli-input" placeholder="Type command (e.g., show routes, help)">
+        <div id="cliOutput" class="cli-output"></div>
+    </div>
 
-def login_required(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if "user_id" not in session:
-            return redirect(url_for("auth.login"))
-        return func(*args, **kwargs)
-    return wrapper
+    <script>
+        const cliInput = document.getElementById('cliCommand');
+        const cliOutput = document.getElementById('cliOutput');
 
-# ---------------- Dashboard ---------------- #
-@main_bp.route("/")
-@login_required
-def dashboard():
-    low_stock = execute_query(
-        "SELECT name, qty FROM products ORDER BY qty ASC LIMIT 5;", fetch=True
-    )
-    recent_invoices = execute_query(
-        "SELECT invoice_number, total FROM invoices ORDER BY date DESC LIMIT 5;", fetch=True
-    )
-    return render_template("index.html", products=low_stock, invoices=recent_invoices)
+        cliInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const cmd = cliInput.value.trim();
+                if (!cmd) return;
 
-# ---------------- Products ---------------- #
-@main_bp.route("/products", methods=["GET", "POST"])
-@login_required
-def products():
-    if request.method == "POST":
-        name = request.form.get("name")
-        category = request.form.get("category")
-        qty = int(request.form.get("qty", 0))
-        price = float(request.form.get("price", 0))
-        execute_query(
-            "INSERT INTO products(name, category, qty, price) VALUES (?, ?, ?, ?);",
-            (name, category, qty, price),
-            commit=True
-        )
-        flash(f"Product '{name}' added!", "success")
-        return redirect(url_for("main.products"))
+                // Basic CLI emulation
+                let response = '';
+                switch(cmd.toLowerCase()) {
+                    case 'help':
+                        response = 'Available commands:\n - help\n - show routes\n - clear';
+                        break;
+                    case 'show routes':
+                        response = 'Dashboard | Products | Customers | Invoices | Top Sellers | Utilities';
+                        break;
+                    case 'clear':
+                        cliOutput.innerHTML = '';
+                        cliInput.value = '';
+                        return;
+                    default:
+                        response = `Unknown command: ${cmd}`;
+                }
 
-    products = execute_query(
-        "SELECT id, name, category, qty, price FROM products;", fetch=True
-    )
-    return render_template("products.html", products=products)
+                cliOutput.innerHTML += `> ${cmd}\n${response}\n`;
+                cliOutput.scrollTop = cliOutput.scrollHeight;
+                cliInput.value = '';
+            }
+        });
 
-@main_bp.route("/products/delete/<int:pid>")
-@login_required
-def delete_product(pid):
-    execute_query("DELETE FROM products WHERE id=?;", (pid,), commit=True)
-    flash("Product deleted!", "info")
-    return redirect(url_for("main.products"))
-
-# ---------------- Customers ---------------- #
-@main_bp.route("/customers", methods=["GET", "POST"])
-@login_required
-def customers():
-    if request.method == "POST":
-        name = request.form.get("name")
-        phone = request.form.get("phone")
-        email = request.form.get("email")
-        execute_query(
-            "INSERT INTO customers(name, phone, email) VALUES (?, ?, ?);",
-            (name, phone, email),
-            commit=True
-        )
-        flash(f"Customer '{name}' added!", "success")
-        return redirect(url_for("main.customers"))
-
-    rows = execute_query("SELECT id, name, phone, email FROM customers;", fetch=True)
-    return render_template("customers.html", customers=rows)
-
-# ---------------- Invoices ---------------- #
-@main_bp.route("/invoices", methods=["GET", "POST"])
-@login_required
-def invoices():
-    customers = execute_query("SELECT id, name FROM customers;", fetch=True)
-    products = execute_query("SELECT id, name, price FROM products WHERE qty>0;", fetch=True)
-
-    if request.method == "POST":
-        customer_id = int(request.form.get("customer_id"))
-        items = []
-        for pid, qty, price in zip(
-            request.form.getlist("product_id"),
-            request.form.getlist("qty"),
-            request.form.getlist("price")
-        ):
-            items.append({
-                "pid": int(pid),
-                "qty": int(qty),
-                "price": float(price)
-            })
-        invoice_id = insert_invoice_and_sales(customer_id, items)
-        if invoice_id:
-            flash(f"Invoice #{invoice_id} created!", "success")
-        else:
-            flash("Failed to create invoice", "danger")
-        return redirect(url_for("main.invoices"))
-
-    invoices = execute_query(
-        "SELECT i.invoice_number, c.name, i.total, i.date "
-        "FROM invoices i LEFT JOIN customers c ON i.customer_id=c.id "
-        "ORDER BY i.date DESC;", fetch=True
-    )
-    return render_template("invoices.html", invoices=invoices, customers=customers, products=products)
-
-# ---------------- Top Sellers ---------------- #
-@main_bp.route("/top-sellers")
-@login_required
-def top_sellers():
-    rows = execute_query(
-        "SELECT p.name, SUM(s.qty) as sold_qty "
-        "FROM sales s JOIN products p ON s.product_id=p.id "
-        "GROUP BY s.product_id ORDER BY sold_qty DESC LIMIT 10;", fetch=True
-    )
-    return render_template("top_sellers.html", top_sellers=rows)
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            if(document.body.classList.contains('dark-mode')) {
+                document.body.style.backgroundColor = '#121212';
+                document.body.style.color = '#cfd8dc';
+            } else {
+                document.body.style.backgroundColor = '#fff';
+                document.body.style.color = '#111';
+            }
+        }
+    </script>
+</main>
+</body>
+</html>

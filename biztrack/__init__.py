@@ -1,6 +1,6 @@
 # biztrack/__init__.py
 from flask import Flask
-from biztrack.routes import main_bp
+from biztrack.routes import main
 from biztrack.auth import auth_bp
 from biztrack.biztrack_db import init_db, seed_default_data
 
@@ -13,7 +13,7 @@ def create_app():
     app.secret_key = "supersecretkey"  # Replace in production
 
     # Register blueprints
-    app.register_blueprint(main_bp)
+    app.register_blueprint(main)
     app.register_blueprint(auth_bp)
 
     # Initialize database

@@ -1,9 +1,9 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from biztrack_db import (
+from .biztrack_db import (
     init_db, seed_default_data, get_products, get_customers,
     get_invoices, get_top_sellers, get_utilities, execute_command
 )
-from auth import login_required
+from .auth import login_required
 
 # Blueprint for main routes
 main = Blueprint("main", __name__)
@@ -62,12 +62,11 @@ def utils():
 # -----------------------
 # CLI AJAX route
 # -----------------------
-
-@cli.route("/run_command", methods=["POST"])
+@main.route("/cli_command", methods=["POST"])
 @login_required
-def run_command():
-    data = request.json
+def cli_command():
+    """AJAX endpoint for running CLI commands from utils.html"""
+    data = request.json or {}
     cmd = data.get("command", "")
     output = execute_command(cmd)
     return jsonify({"output": output})
-
