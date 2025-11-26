@@ -1,16 +1,20 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from .auth import login_required
 from biztrack.forms import  (
-    CustomerAddForm, CustomerDeleteForm,
-    ProductAddForm, ProductDeleteForm,
-    InvoiceAddForm, InvoiceDeleteForm
+    CustomerAddForm, CustomerDeleteForm, CustomerUpdateForm,
+    ProductAddForm, ProductDeleteForm, ProductUpdateForm,
+    InvoiceAddForm, InvoiceDeleteForm, InvoiceUpdateForm,
+    PayrollAddForm, PayrollDeleteForm
 )
-from .biztrack_db import get_top_sellers
+from .biztrack_db import (get_top_sellers, execute_query, create_invoice_and_insert_sales)
 from .biztrack_db import (
     init_db, seed_default_data,
-    get_products, get_customers, get_invoices, get_top_sellers, get_utilities,
+    get_products, get_customers, get_invoices, get_low_stock_products,
+    get_top_sellers, get_utilities,
+    export_table_to_csv, import_table_from_csv,
     add_product, update_product, delete_product,
     add_customer, update_customer, delete_customer,
+    get_payrolls, add_payroll, update_payroll, delete_payroll,
     record_sale, delete_sale, get_sale_details,
     execute_command
 )
@@ -65,6 +69,7 @@ def api_dashboard_sales():
 def api_dashboard_categories():
     categories = ["Electronics", "Clothing", "Books", "Food"]
     counts = [40, 25, 15, 20]
+    payroll_count = len(get_payrolls()) # New line to get payroll count
     return jsonify({"categories": categories, "counts": counts})
 
 # -----------------------
@@ -75,27 +80,47 @@ def api_dashboard_categories():
 def products():
     add_form = ProductAddForm()
     delete_form = ProductDeleteForm()
+    update_form = ProductUpdateForm()
 
-    if add_form.validate_on_submit() and getattr(add_form, "action", None) and add_form.action.data == "add":
+    # Handle Add
+    if add_form.validate_on_submit() and add_form.action.data == "add":
         try:
-            add_product(add_form.name.data, add_form.category.data,
-                        add_form.qty.data, add_form.price.data)
+            execute_query(
+                "INSERT INTO products (name, category, qty, price) VALUES (?, ?, ?, ?);",
+                (add_form.name.data, add_form.category.data, add_form.qty.data, add_form.price.data),
+                commit=True
+            )
             flash("Product added successfully", "success")
         except Exception as e:
-            flash(f"Error: {str(e)}", "error")
+            flash(f"Error adding product: {e}", "danger")
         return redirect(url_for("main.products"))
 
-    if delete_form.validate_on_submit() and getattr(delete_form, "action", None) and delete_form.action.data == "delete":
+    # Handle Delete
+    if delete_form.validate_on_submit() and delete_form.action.data == "delete":
         try:
-            delete_product(int(delete_form.id.data))
+            execute_query("DELETE FROM products WHERE id=?;", (delete_form.id.data,), commit=True)
             flash("Product deleted successfully", "success")
         except Exception as e:
-            flash(f"Error: {str(e)}", "error")
+            flash(f"Error deleting product: {e}", "danger")
+        return redirect(url_for("main.products"))
+
+    # Handle Update
+    if update_form.validate_on_submit() and update_form.action.data == "update":
+        try:
+            execute_query(
+                "UPDATE products SET name=?, category=?, qty=?, price=? WHERE id=?;",
+                (update_form.name.data, update_form.category.data, update_form.qty.data,
+                 update_form.price.data, update_form.id.data),
+                commit=True
+            )
+            flash("Product updated successfully", "success")
+        except Exception as e:
+            flash(f"Error updating product: {e}", "danger")
         return redirect(url_for("main.products"))
 
     products = get_products()
     return render_template("products.html", products=products,
-                           add_form=add_form, delete_form=delete_form)
+                           add_form=add_form, delete_form=delete_form, update_form=update_form)
 
 # -----------------------
 # Customers
@@ -113,7 +138,7 @@ def customers():
         except Exception as e:
             flash(f"Error: {str(e)}", "error")
         return redirect(url_for("main.customers"))
-
+    
     if delete_form.validate_on_submit() and delete_form.action.data == "delete":
         try:
             delete_customer(int(delete_form.id.data))
@@ -125,6 +150,55 @@ def customers():
     customers = get_customers()
     return render_template("customers.html", customers=customers,
                            add_form=add_form, delete_form=delete_form)
+    
+@main.route("/customers", methods=["GET", "POST"])
+@login_required
+def customers():
+    add_form = CustomerAddForm()
+    delete_form = CustomerDeleteForm()
+    update_form = CustomerUpdateForm()
+
+    if update_form.validate_on_submit() and update_form.action.data == "update":
+        execute_query(
+            "UPDATE customers SET name=?, phone=?, email=? WHERE id=?;",
+            (update_form.name.data, update_form.phone.data, update_form.email.data, update_form.id.data),
+            commit=True
+        )
+        flash("Customer updated successfully", "success")
+        return redirect(url_for("main.customers"))
+
+    customers = get_customers()
+    return render_template("customers.html", customers=customers,
+                           add_form=add_form, delete_form=delete_form, update_form=update_form)
+
+# -----------------------
+# Payrolls
+#-----------------------
+@main.route("/payrolls", methods=["GET", "POST"])
+@login_required
+def payrolls():
+    # You’ll create PayrollAddForm and PayrollDeleteForm in forms.py
+    add_form = PayrollAddForm()
+    delete_form = PayrollDeleteForm()
+
+    if add_form.validate_on_submit() and add_form.action.data == "add":
+        try:
+            add_payroll(add_form.employee_name.data, add_form.salary.data, add_form.date.data)
+            flash("Payroll record added successfully", "success")
+        except Exception as e:
+            flash(f"Error: {str(e)}", "error")
+        return redirect(url_for("main.payrolls"))
+
+    if delete_form.validate_on_submit() and delete_form.action.data == "delete":
+        try:
+            delete_payroll(int(delete_form.id.data))
+            flash("Payroll record deleted successfully", "success")
+        except Exception as e:
+            flash(f"Error: {str(e)}", "error")
+        return redirect(url_for("main.payrolls"))
+
+    payrolls = get_payrolls()
+    return render_template("payrolls.html", payrolls=payrolls, add_form=add_form, delete_form=delete_form)
 
 # -----------------------
 # Invoices
@@ -134,26 +208,61 @@ def customers():
 def invoices():
     add_form = InvoiceAddForm()
     delete_form = InvoiceDeleteForm()
+    update_form = InvoiceUpdateForm()
 
-    if add_form.validate_on_submit():
+    # Handle Add
+    if add_form.validate_on_submit() and add_form.action.data == "add":
         try:
-            invoice_id = record_sale(add_form.customer_id.data, add_form.items.data)
-            flash(f"Invoice {invoice_id} created successfully", "success")
+            items = []
+            for item_form in add_form.items.entries:
+                items.append({
+                    "pid": item_form.form.pid.data,
+                    "qty": item_form.form.qty.data,
+                    "price": item_form.form.price.data
+                })
+            invoice_id = create_invoice_and_insert_sales(add_form.customer_id.data, items)
+            if invoice_id:
+                flash("Invoice created successfully", "success")
+            else:
+                flash("Failed to create invoice", "danger")
         except Exception as e:
-            flash(f"Error: {str(e)}", "error")
+            flash(f"Error creating invoice: {e}", "danger")
         return redirect(url_for("main.invoices"))
 
+    # Handle Delete
     if delete_form.validate_on_submit() and delete_form.action.data == "delete":
         try:
-            delete_sale(int(delete_form.id.data))
+            execute_query("DELETE FROM invoices WHERE id=?;", (delete_form.id.data,), commit=True)
             flash("Invoice deleted successfully", "success")
         except Exception as e:
-            flash(f"Error: {str(e)}", "error")
+            flash(f"Error deleting invoice: {e}", "danger")
+        return redirect(url_for("main.invoices"))
+
+    # Handle Update
+    if update_form.validate_on_submit() and update_form.action.data == "update":
+        try:
+            execute_query(
+                "UPDATE invoices SET customer_id=?, total=?, date=? WHERE id=?;",
+                (update_form.customer_id.data, update_form.total.data,
+                 update_form.date.data, update_form.id.data),
+                commit=True
+            )
+            flash("Invoice updated successfully", "success")
+        except Exception as e:
+            flash(f"Error updating invoice: {e}", "danger")
         return redirect(url_for("main.invoices"))
 
     invoices = get_invoices()
     return render_template("invoices.html", invoices=invoices,
-                           add_form=add_form, delete_form=delete_form)
+                           add_form=add_form, delete_form=delete_form, update_form=update_form)
+# -----------------------
+# Alerts
+
+@main.route("/alerts/low-stock")
+@login_required
+def low_stock_alerts():
+    low_stock = get_low_stock_products()
+    return render_template("alerts.html", low_stock=low_stock)
 
 # -----------------------
 # Top Sellers
@@ -172,6 +281,33 @@ def top_sellers():
 def utils():
     utilities = get_utilities()
     return render_template("utils.html", utilities=utilities)
+
+@main.route("/export/<table>")
+@login_required
+def export_table(table):
+    filepath = f"{table}.csv"
+    success = export_table_to_csv(table, filepath)
+    if success:
+        flash(f"{table} exported to {filepath}", "success")
+    else:
+        flash(f"Failed to export {table}", "error")
+    return redirect(url_for("main.utils"))
+
+@main.route("/import/<table>", methods=["POST"])
+@login_required
+def import_table(table):
+    file = request.files.get("file")
+    if not file:
+        flash("No file uploaded", "error")
+        return redirect(url_for("main.utils"))
+    filepath = f"uploads/{file.filename}"
+    file.save(filepath)
+    success = import_table_from_csv(table, filepath)
+    if success:
+        flash(f"{table} imported successfully", "success")
+    else:
+        flash(f"Failed to import {table}", "error")
+    return redirect(url_for("main.utils"))
 
 @main.route("/run_command", methods=["POST"])
 @login_required
@@ -192,6 +328,8 @@ def routes_page():
         {"name": "customers", "description": "Manage customers"},
         {"name": "products", "description": "Manage products"},
         {"name": "invoices", "description": "View invoices"},
+        {"name": "payrolls", "description": "Manage payroll records"},
+        {"name": "alerts/low-stock", "description": "View low-stock alerts"},
         {"name": "utils", "description": "Run CLI commands"},
         {"name": "top-sellers", "description": "View top selling products"},
     ]

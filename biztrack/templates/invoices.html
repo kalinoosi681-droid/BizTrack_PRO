@@ -4,21 +4,38 @@
 
 <div class="row">
   <!-- Add Invoice Form -->
-  <div class="col-md-6">
-    <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold">Create Invoice</div>
-      <div class="card-body">
-        <form method="POST">
-          {{ add_form.hidden_tag() }}
-          <div class="mb-3">
-            {{ add_form.customer_id.label }} 
-            {{ add_form.customer_id(class="form-control") }}
-          </div>
-          {{ add_form.submit(class="btn btn-primary") }}
-        </form>
+  <div class="card shadow-sm mb-4">
+  <div class="card-header fw-bold">Create Invoice</div>
+  <div class="card-body">
+    <form method="POST">
+      {{ add_form.hidden_tag() }}
+      <div class="mb-3">
+        {{ add_form.customer_id.label(class="form-label") }}
+        {{ add_form.customer_id(class="form-control") }}
       </div>
-    </div>
+
+      <h6 class="fw-bold">Items</h6>
+      <div class="row">
+        {% for item_form in add_form.items %}
+        <div class="col-md-4 mb-2">
+          {{ item_form.pid.label(class="form-label") }}
+          {{ item_form.pid(class="form-control") }}
+        </div>
+        <div class="col-md-4 mb-2">
+          {{ item_form.qty.label(class="form-label") }}
+          {{ item_form.qty(class="form-control") }}
+        </div>
+        <div class="col-md-4 mb-2">
+          {{ item_form.price.label(class="form-label") }}
+          {{ item_form.price(class="form-control") }}
+        </div>
+        {% endfor %}
+      </div>
+
+      {{ add_form.submit(class="btn btn-primary mt-3") }}
+    </form>
   </div>
+</div>
 
   <!-- Delete Invoice Form -->
   <div class="col-md-6">

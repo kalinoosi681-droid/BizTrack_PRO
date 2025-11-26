@@ -8,7 +8,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from biztrack.routes import main
 from biztrack.auth import auth_bp
-from biztrack.biztrack_db import init_db, seed_default_data
+from biztrack.biztrack_db import init_db, seed_default_data, migrate_schema
 from biztrack.config import config_map
 import logging
 import os
@@ -72,6 +72,7 @@ def create_app(config_name=None):
     with app.app_context():
         init_db()
         seed_default_data()
+        migrate_schema()
     
     # Health check endpoint
     @app.route('/health')

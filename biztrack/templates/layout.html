@@ -15,23 +15,26 @@
       </button>
 
       <div class="collapse navbar-collapse" id="navbarNav">
+        
+
+        <ul class="navbar-nav align-items-center gap-2">
         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.products') }}">Products</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.customers') }}">Customers</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.invoices') }}">Invoices</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.payrolls') }}">Payrolls</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.top_sellers') }}">Top Sellers</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.low_stock_alerts') }}">Alerts</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.utils') }}">Utilities</a></li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.routes_page') }}">Routes</a></li>
         </ul>
-
-        <ul class="navbar-nav align-items-center gap-2">
           <!-- Theme toggle -->
           <li class="nav-item">
             <button id="themeToggle" class="btn btn-outline-light btn-sm" type="button" aria-label="Toggle theme">
               <span id="themeIcon">🌙</span> <span id="themeLabel" class="ms-1">Dark</span>
             </button>
-          </li>
+        
           <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a></li>
         </ul>
       </div>

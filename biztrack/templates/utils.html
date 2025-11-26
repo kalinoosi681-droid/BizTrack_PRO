@@ -2,20 +2,66 @@
 {% block content %}
 <h2 class="mb-4">Utilities</h2>
 
-<!-- Terminal -->
-<div id="cli-terminal" class="bg-dark text-light p-3 rounded shadow-sm animate__animated animate__fadeIn" 
-     style="height:300px; overflow-y:auto; font-family:monospace;">
-    <div>> Welcome to BizTrack CLI</div>
+<div class="row">
+  <!-- CLI Terminal -->
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">BizTrack CLI</div>
+      <div class="card-body bg-dark text-light p-3 rounded" style="height:300px; overflow-y:auto; font-family:monospace;" id="cli-terminal">
+        <div>> Welcome to BizTrack CLI</div>
+      </div>
+      <div class="card-footer">
+        <form id="cli-form" class="d-flex w-100">
+          <div class="position-relative w-100">
+            <input type="text" id="command" class="form-control me-2" placeholder="Enter command" autocomplete="off">
+            <div id="cli-suggest" class="list-group position-absolute w-100" style="z-index:1070;"></div>
+          </div>
+          <button class="btn btn-primary">Run</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- CSV Utilities -->
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">CSV Import / Export</div>
+      <div class="card-body">
+        <a href="{{ url_for('main.export_table', table='products') }}" class="btn btn-sm btn-outline-primary mb-2">Export Products</a>
+        <a href="{{ url_for('main.export_table', table='customers') }}" class="btn btn-sm btn-outline-primary mb-2">Export Customers</a>
+        <form action="{{ url_for('main.import_table', table='products') }}" method="post" enctype="multipart/form-data" class="mt-2">
+          <label class="form-label">Import Products CSV</label>
+          <input type="file" name="file" class="form-control form-control-sm mb-2">
+          <button type="submit" class="btn btn-sm btn-outline-success">Import</button>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- CLI Form with Autocomplete -->
-<form id="cli-form" class="mt-2 d-flex w-100">
-  <div class="position-relative w-100">
-    <input type="text" id="command" class="form-control me-2" placeholder="Enter command" autocomplete="off">
-    <div id="cli-suggest" class="list-group position-absolute w-100" style="z-index:1070;"></div>
+<div class="row">
+  <!-- Payroll Utilities -->
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Payroll Utilities</div>
+      <div class="card-body">
+        <p class="text-muted">Quick access to payroll records.</p>
+        <a href="{{ url_for('main.payrolls') }}" class="btn btn-sm btn-outline-primary">Manage Payrolls</a>
+      </div>
+    </div>
   </div>
-  <button class="btn btn-primary">Run</button>
-</form>
+
+  <!-- Low Stock Alerts -->
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Low Stock Alerts</div>
+      <div class="card-body">
+        <p class="text-muted">View products below threshold.</p>
+        <a href="{{ url_for('main.low_stock_alerts') }}" class="btn btn-sm btn-outline-danger">View Alerts</a>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 (function() {
@@ -24,7 +70,7 @@
   const history = [];
   let index = -1;
 
-  // History navigation (↑ / ↓)
+  // History navigation
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowUp") {
       if (history.length) {
