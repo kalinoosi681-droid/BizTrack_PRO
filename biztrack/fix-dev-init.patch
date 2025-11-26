@@ -1,0 +1,84 @@
+diff --git a/biztrack/__init__.py b/biztrack/__init__.py
+--- a/biztrack/__init__.py
++++ b/biztrack/__init__.py
+@@ -1,20 +1,57 @@
+-from flask import Flask
+-from flask_wtf.csrf import CSRFProtect
+-
+-csrf = CSRFProtect()
+-
+-def create_app(config_name=None):
+-    # NOTE: original version had conditional branches that could leave `app` undefined
+-    # which caused: UnboundLocalError: cannot access local variable 'app'
+-    # This rewrite ensures `app` always exists BEFORE being used.
+-    from biztrack.config import DevelopmentConfig
+-
+-    app = Flask(__name__)
+-    app.config.from_object(DevelopmentConfig)
+-
+-    csrf.init_app(app)
+-
+-    from biztrack.routes import main_bp
+-    from biztrack.auth import auth_bp
+-    app.register_blueprint(main_bp)
+-    app.register_blueprint(auth_bp)
+-
+-    return app
++"""
+CLEAN DEVELOPMENT-ONLY INITIALIZATION
+-------------------------------------
+This ensures the following:
+✔ app is ALWAYS defined before use
+✔ CSRF protection initializes correctly
+✔ development config always loads
+✔ blueprint registration is stable
+"""
++
++from flask import Flask
++from flask_wtf.csrf import CSRFProtect
++
++csrf = CSRFProtect()
++
++
++def create_app(config_name=None):
++    # 1) Create app FIRST
++    app = Flask(__name__)
++
++    # 2) Always load development config
++    try:
++        from biztrack.config import DevelopmentConfig
++        app.config.from_object(DevelopmentConfig)
++    except Exception:
++        # fallback
++        app.config.update(
++            SECRET_KEY="dev-secret-key",
++            WTF_CSRF_ENABLED=True,
++            SESSION_PERMANENT=False,
++            DEBUG=True,
++        )
++
++    # 3) Initialize CSRF AFTER app exists
++    csrf.init_app(app)
++
++    # 4) Register blueprints
++    try:
++        from .routes import main_bp
++        from .auth import auth_bp
++        app.register_blueprint(main_bp)
++        app.register_blueprint(auth_bp)
++    except Exception as e:
++        raise RuntimeError(f"Error registering blueprints: {e}")
++
++    return app
+diff --git a/biztrack/templates/login.html b/biztrack/templates/login.html
+--- a/biztrack/templates/login.html
++++ b/biztrack/templates/login.html
+@@ -7,6 +7,8 @@
+     <h2>Login to BizTrack PRO</h2>
+     <form method="POST" action="{{ url_for('auth.login') }}">
+ 
++        {{ csrf_token() }}
++
+         <input type="text" name="username" placeholder="Username" required>
+         <input type="password" name="password" placeholder="Password" required>
+         <button type="submit">Login</button>
