@@ -1,51 +1,57 @@
+
 {% extends "layout.html" %}
 {% block content %}
 <h2 class="mb-4">Invoices</h2>
 
 <div class="row">
-  <!-- Add Invoice Form -->
-  <div class="card shadow-sm mb-4">
-  <div class="card-header fw-bold">Create Invoice</div>
-  <div class="card-body">
-    <form method="POST">
-      {{ add_form.hidden_tag() }}
-      <div class="mb-3">
-        {{ add_form.customer_id.label(class="form-label") }}
-        {{ add_form.customer_id(class="form-control") }}
-      </div>
+  <!-- Create Invoice Form -->
+  <div class="col-md-8">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-bold">Create Invoice</div>
+      <div class="card-body">
+        <form method="POST">
+          {{ add_form.hidden_tag() }}
+          <input type="hidden" name="action" value="add">
+          
+          <div class="mb-3">
+            {{ add_form.customer_id.label(class="form-label") }}
+            {{ add_form.customer_id(class="form-control") }}
+          </div>
 
-      <h6 class="fw-bold">Items</h6>
-      <div class="row">
-        {% for item_form in add_form.items %}
-        <div class="col-md-4 mb-2">
-          {{ item_form.pid.label(class="form-label") }}
-          {{ item_form.pid(class="form-control") }}
-        </div>
-        <div class="col-md-4 mb-2">
-          {{ item_form.qty.label(class="form-label") }}
-          {{ item_form.qty(class="form-control") }}
-        </div>
-        <div class="col-md-4 mb-2">
-          {{ item_form.price.label(class="form-label") }}
-          {{ item_form.price(class="form-control") }}
-        </div>
-        {% endfor %}
-      </div>
+          <h6 class="fw-bold">Invoice Items</h6>
+          {% for item_form in add_form.items %}
+          <div class="row mb-2">
+            <div class="col-md-4">
+              {{ item_form.pid.label(class="form-label") }}
+              {{ item_form.pid(class="form-control") }}
+            </div>
+            <div class="col-md-4">
+              {{ item_form.qty.label(class="form-label") }}
+              {{ item_form.qty(class="form-control") }}
+            </div>
+            <div class="col-md-4">
+              {{ item_form.price.label(class="form-label") }}
+              {{ item_form.price(class="form-control", step="0.01") }}
+            </div>
+          </div>
+          {% endfor %}
 
-      {{ add_form.submit(class="btn btn-primary mt-3") }}
-    </form>
+          {{ add_form.submit(class="btn btn-primary mt-3") }}
+        </form>
+      </div>
+    </div>
   </div>
-</div>
 
   <!-- Delete Invoice Form -->
-  <div class="col-md-6">
+  <div class="col-md-4">
     <div class="card shadow-sm mb-4">
       <div class="card-header fw-bold">Delete Invoice</div>
       <div class="card-body">
         <form method="POST">
           {{ delete_form.hidden_tag() }}
+          <input type="hidden" name="action" value="delete">
           <div class="mb-3">
-            {{ delete_form.id.label }} 
+            {{ delete_form.id.label(class="form-label") }}
             {{ delete_form.id(class="form-control") }}
           </div>
           {{ delete_form.submit(class="btn btn-danger") }}
@@ -63,18 +69,20 @@
       <thead class="table-light">
         <tr>
           <th>ID</th>
+          <th>Invoice #</th>
           <th>Customer ID</th>
-          <th>Date</th>
           <th>Total</th>
+          <th>Date</th>
         </tr>
       </thead>
       <tbody>
         {% for inv in invoices %}
         <tr>
           <td>{{ inv.id }}</td>
+          <td>{{ inv.invoice_number }}</td>
           <td>{{ inv.customer_id }}</td>
-          <td>{{ inv.created_at }}</td>
-          <td>${{ "%.2f"|format(inv.total) if inv.total is defined else "0.00" }}</td>
+          <td>${{ "%.2f"|format(inv.total) if inv.total else "0.00" }}</td>
+          <td>{{ inv.date }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -92,43 +100,44 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  const months = ["Jan", "Feb", "Mar", "Apr", "May"];
-  const totals = [1200, 1500, 1800, 1700, 2000]; // placeholder data
-
-  new Chart(document.getElementById("invoiceChart"), {
-    type: "bar",
-    data: {
-      labels: months,
-      datasets: [{
-        label: "Invoice Totals ($)",
-        data: totals,
-        backgroundColor: "#198754",
-        borderRadius: 5
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              return "$" + context.formattedValue;
+  fetch("{{ url_for('main.api_dashboard_sales') }}")
+    .then(res => res.json())
+    .then(data => {
+      new Chart(document.getElementById("invoiceChart"), {
+        type: "bar",
+        data: {
+          labels: data.months,
+          datasets: [{
+            label: "Invoice Totals ($)",
+            data: data.sales,
+            backgroundColor: "#198754",
+            borderRadius: 5
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return "$" + context.formattedValue;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return "$" + value;
+                }
+              }
             }
           }
         }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            callback: function(value) {
-              return "$" + value;
-            }
-          }
-        }
-      }
-    }
-  });
+      });
+    });
 </script>
 {% endblock %}

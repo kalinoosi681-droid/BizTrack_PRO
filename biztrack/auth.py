@@ -1,12 +1,15 @@
+
 # ========================================
-# auth.py (SECURE VERSION with users table)
+# FIX 3: auth.py - Add current_year to login template
 # ========================================
+
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from biztrack.biztrack_db import execute_query, get_user_by_username
 import os
 import logging
 from functools import wraps
+from datetime import datetime
 from .forms import LoginForm
 
 auth_bp = Blueprint("auth", __name__, template_folder="templates")
@@ -19,7 +22,6 @@ def setup_admin_if_needed():
         username = os.environ.get('ADMIN_USER', 'admin')
         password = os.environ.get('ADMIN_PASS', 'admin123')
 
-        # Warn if using default password
         if password == 'admin123':
             logging.warning("⚠️ Using default admin password! Set ADMIN_PASS environment variable!")
 
@@ -45,9 +47,6 @@ def login_required(func):
         return func(*args, **kwargs)
     return wrapper
 
-# -----------------------
-# Login
-# -----------------------
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     form = LoginForm()
@@ -58,18 +57,18 @@ def login():
         user = get_user_by_username(username)
         if user and check_password_hash(user["password"], password):
             session["user_id"] = user["id"]
+            session["username"] = username  # Store username in session
             flash("Login successful!", "success")
             return redirect(url_for("main.dashboard"))
         else:
-            flash("Invalid username or password", "error")
+            flash("Invalid username or password", "danger")
 
-    return render_template("login.html", form=form)
+    # Add current_year for footer
+    return render_template("login.html", form=form, current_year=datetime.now().year)
 
-# -----------------------
-# Logout
-# -----------------------
 @auth_bp.route("/logout")
 def logout():
-    session.pop("user_id", None)
+    session.clear()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))
+# ========================================

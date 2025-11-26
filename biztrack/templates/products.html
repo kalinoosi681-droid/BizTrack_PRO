@@ -1,32 +1,68 @@
+
 {% extends "layout.html" %}
 {% block content %}
 <h2 class="mb-4">Products</h2>
 
 <div class="row">
   <!-- Add Product Form -->
-  <div class="col-md-6">
+  <div class="col-md-4">
     <div class="card shadow-sm mb-4">
       <div class="card-header fw-bold">Add Product</div>
       <div class="card-body">
         <form method="POST">
           {{ add_form.hidden_tag() }}
+          <input type="hidden" name="action" value="add">
           <div class="mb-3">
-            {{ add_form.name.label }} 
+            {{ add_form.name.label(class="form-label") }}
             {{ add_form.name(class="form-control") }}
           </div>
           <div class="mb-3">
-            {{ add_form.category.label }} 
+            {{ add_form.category.label(class="form-label") }}
             {{ add_form.category(class="form-control") }}
           </div>
           <div class="mb-3">
-            {{ add_form.qty.label }} 
+            {{ add_form.qty.label(class="form-label") }}
             {{ add_form.qty(class="form-control") }}
           </div>
           <div class="mb-3">
-            {{ add_form.price.label }} 
-            {{ add_form.price(class="form-control") }}
+            {{ add_form.price.label(class="form-label") }}
+            {{ add_form.price(class="form-control", step="0.01") }}
           </div>
           {{ add_form.submit(class="btn btn-primary") }}
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Update Product Form -->
+  <div class="col-md-4">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-bold">Update Product</div>
+      <div class="card-body">
+        <form method="POST">
+          {{ update_form.hidden_tag() }}
+          <input type="hidden" name="action" value="update">
+          <div class="mb-3">
+            {{ update_form.id.label(class="form-label") }}
+            {{ update_form.id(class="form-control") }}
+          </div>
+          <div class="mb-3">
+            {{ update_form.name.label(class="form-label") }}
+            {{ update_form.name(class="form-control") }}
+          </div>
+          <div class="mb-3">
+            {{ update_form.category.label(class="form-label") }}
+            {{ update_form.category(class="form-control") }}
+          </div>
+          <div class="mb-3">
+            {{ update_form.qty.label(class="form-label") }}
+            {{ update_form.qty(class="form-control") }}
+          </div>
+          <div class="mb-3">
+            {{ update_form.price.label(class="form-label") }}
+            {{ update_form.price(class="form-control", step="0.01") }}
+          </div>
+          {{ update_form.submit(class="btn btn-warning") }}
         </form>
       </div>
     </div>
@@ -39,6 +75,7 @@
       <div class="card-body">
         <form method="POST">
           {{ delete_form.hidden_tag() }}
+          <input type="hidden" name="action" value="delete">
           <div class="mb-3">
             {{ delete_form.id.label }} 
             {{ delete_form.id(class="form-control") }}
