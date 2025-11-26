@@ -7,6 +7,7 @@ from shutil import copy2
 from datetime import datetime
 from typing import Optional, Sequence, List, Dict
 import logging
+from werkzeug.security import generate_password_hash
 
 # Configure logging
 logger = logging.getLogger("biztrack_db")
@@ -121,6 +122,7 @@ def insert_invoice_and_sales(customer_id: int, items: List[Dict], sale_time: Opt
 def init_db() -> None:
     with get_connection() as conn:
         cur = conn.cursor()
+
         # Products table
         cur.execute("""
             CREATE TABLE IF NOT EXISTS products (
@@ -132,6 +134,7 @@ def init_db() -> None:
                 UNIQUE(name, category)
             );
         """)
+
         # Customers
         cur.execute("""
             CREATE TABLE IF NOT EXISTS customers (
@@ -142,6 +145,7 @@ def init_db() -> None:
                 UNIQUE(name, phone)
             );
         """)
+
         # Sales
         cur.execute("""
             CREATE TABLE IF NOT EXISTS sales (
@@ -157,6 +161,7 @@ def init_db() -> None:
                 FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
             );
         """)
+
         # Payrolls
         cur.execute("""
             CREATE TABLE IF NOT EXISTS payrolls (
@@ -167,15 +172,18 @@ def init_db() -> None:
                 UNIQUE(employee_name, date)
             );
         """)
-        # Admins
+
+        # ✅ Users table (replaces admins)
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS admins (
+            CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
-                salt TEXT NOT NULL,
-                passhash TEXT NOT NULL
+                password TEXT NOT NULL,
+                role TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+
         # Invoices
         cur.execute("""
             CREATE TABLE IF NOT EXISTS invoices (
@@ -187,10 +195,12 @@ def init_db() -> None:
                 FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE
             );
         """)
+
         conn.commit()
         cur.close()
-    logger.info("Database initialized successfully")
 
+    logger.info("Database initialized successfully")
+    
 def remove_duplicates() -> None:
     try:
         with get_connection() as conn:
@@ -235,53 +245,106 @@ def backup_db() -> Optional[str]:
 
 def seed_default_data() -> None:
     try:
+        # Seed products
         count_res = execute_query("SELECT COUNT(*) FROM products;", fetchone=True)
-        if count_res is None or count_res[0] > 0:
+        if count_res is None or count_res[0] == 0:
+            products = [
+                ("Espresso Beans 1kg", "Beverages", 12, 8.5),
+                ("Black Tea 200g", "Beverages", 30, 3.0),
+                ("Blue Apron Towel", "Home", 5, 12.0),
+                ("Notebook A5", "Stationery", 50, 1.5),
+                ("Hand Sanitizer 500ml", "Health", 20, 4.5),
+            ]
+            with get_connection() as conn:
+                cur = conn.cursor()
+                cur.executemany(
+                    "INSERT OR IGNORE INTO products (name, category, qty, price) VALUES (?, ?, ?, ?);",
+                    products
+                )
+                conn.commit()
+                cur.close()
+            logger.info("Default product data added successfully")
+        else:
             logger.info("Product data exists, skipping seed")
-            return
-        products = [
-            ("Espresso Beans 1kg", "Beverages", 12, 8.5),
-            ("Black Tea 200g", "Beverages", 30, 3.0),
-            ("Blue Apron Towel", "Home", 5, 12.0),
-            ("Notebook A5", "Stationery", 50, 1.5),
-            ("Hand Sanitizer 500ml", "Health", 20, 4.5),
-        ]
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.executemany(
-                "INSERT OR IGNORE INTO products (name, category, qty, price) VALUES (?, ?, ?, ?);",
-                products
-            )
-            conn.commit()
-            cur.close()
-        logger.info("Default product data added successfully")
-    except Exception as exc:
-        logger.exception("Failed to seed default product data")
 
+        # ✅ Seed default admin user
+        user_res = execute_query("SELECT COUNT(*) FROM users;", fetchone=True)
+        if user_res is None or user_res[0] == 0:
+            with get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO users (username, password, role) VALUES (?, ?, ?);",
+                    ("admin", generate_password_hash("admin123"), "admin")
+                )
+                conn.commit()
+                cur.close()
+            logger.info("Default admin user added successfully")
+        else:
+            logger.info("User data exists, skipping seed")
+
+    except Exception as exc:
+        logger.exception("Failed to seed default data")
+# ----------------------------
+# User helper functions
+def get_user_by_username(username: str) -> Optional[dict]:
+    row = execute_query("SELECT * FROM users WHERE username=?;", (username,), fetchone=True)
+    if row:
+        # Get column names properly
+        cursor = get_connection().cursor()
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [col[1] for col in cursor.fetchall()]  # <-- use col[1], not col[0]
+        return dict(zip(columns, row))
+    return None
 # ----------------------------
 # Web route helper functions
-# ----------------------------
+# -------------------------
 def get_products() -> list[dict]:
     rows = execute_query("SELECT * FROM products;", fetch=True)
-    return [dict(zip([column[0] for column in get_connection().cursor().execute("PRAGMA table_info(products)")], row)) for row in rows]
+    cursor = get_connection().cursor()
+    cursor.execute("PRAGMA table_info(products)")
+    columns = [col[1] for col in cursor.fetchall()]  # use column names
+    return [dict(zip(columns, row)) for row in rows]
 
 def get_customers() -> list[dict]:
     rows = execute_query("SELECT * FROM customers;", fetch=True)
-    return [dict(zip([column[0] for column in get_connection().cursor().execute("PRAGMA table_info(customers)")], row)) for row in rows]
+    cursor = get_connection().cursor()
+    cursor.execute("PRAGMA table_info(customers)")
+    columns = [col[1] for col in cursor.fetchall()]
+    return [dict(zip(columns, row)) for row in rows]
 
 def get_invoices() -> list[dict]:
     rows = execute_query("SELECT * FROM invoices;", fetch=True)
-    return [dict(zip([column[0] for column in get_connection().cursor().execute("PRAGMA table_info(invoices)")], row)) for row in rows]
+    cursor = get_connection().cursor()
+    cursor.execute("PRAGMA table_info(invoices)")
+    columns = [col[1] for col in cursor.fetchall()]
+    return [dict(zip(columns, row)) for row in rows]
 
-def get_top_sellers() -> list[dict]:
-    rows = execute_query("""
-        SELECT product_id, SUM(qty) as total_sold
-        FROM sales
-        GROUP BY product_id
-        ORDER BY total_sold DESC
-        LIMIT 5;
-    """, fetch=True)
-    return [{"product_id": r[0], "total_sold": r[1]} for r in rows]
+def get_sale_details() -> list[dict]:
+    rows = execute_query("SELECT * FROM sale_details;", fetch=True)
+    cursor = get_connection().cursor()
+    cursor.execute("PRAGMA table_info(sale_details)")
+    columns = [col[1] for col in cursor.fetchall()]
+    return [dict(zip(columns, row)) for row in rows]
+
+def get_top_sellers(limit: int = 5) -> list[dict]:
+    """
+    Return top-selling products by revenue.
+    Joins sale_details with products to calculate total revenue.
+    """
+    query = """
+        SELECT p.id, p.name, SUM(sd.qty * sd.price) AS revenue
+        FROM sale_details sd
+        JOIN products p ON sd.product_id = p.id
+        GROUP BY p.id, p.name
+        ORDER BY revenue DESC
+        LIMIT ?;
+    """
+    rows = execute_query(query, (limit,), fetch=True)
+    cursor = get_connection().cursor()
+    cursor.execute("PRAGMA table_info(products)")
+    product_columns = [col[1] for col in cursor.fetchall()]
+    # We only care about id, name, and revenue here
+    return [{"id": row[0], "name": row[1], "revenue": row[2]} for row in rows]
 
 def get_utilities() -> list[dict]:
     # Example placeholder: returns backups and duplicates info
@@ -464,5 +527,12 @@ def execute_command(command: str, admin_user_id: int = None) -> dict:
     except Exception as e:
         logger.exception("Command execution error")
         return {"success": False, "output": "", "error": str(e)}
+    
+def run_admin_command(cmd: str, admin_user_id: int = None) -> str:
+    result = execute_command(cmd, admin_user_id)
+    if result["success"]:
+        return result["output"]
+    else:
+        return f"Error: {result['error']}"
 
 # -----------------------

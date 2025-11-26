@@ -1,0 +1,87 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="mb-4">Top Sellers</h2>
+
+<div class="row">
+  <!-- Top Sellers Table -->
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Top Sellers List</div>
+      <div class="card-body">
+        <table class="table table-striped table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Product ID</th>
+              <th>Name</th>
+              <th>Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in top_sellers %}
+            <tr>
+              <td>{{ t.id }}</td>
+              <td>{{ t.name }}</td>
+              <td>${{ "%.2f"|format(t.revenue) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Sellers Chart -->
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Revenue by Product</div>
+      <div class="card-body">
+        <canvas id="topSellersChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // Prepare data from Jinja context
+  const productNames = {{ top_sellers | map(attribute='name') | list | tojson }};
+  const revenues = {{ top_sellers | map(attribute='revenue') | list | tojson }};
+
+  new Chart(document.getElementById("topSellersChart"), {
+    type: "bar",
+    data: {
+      labels: productNames,
+      datasets: [{
+        label: "Revenue ($)",
+        data: revenues,
+        backgroundColor: "#0d6efd",
+        borderRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return "$" + context.formattedValue;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(value) {
+              return "$" + value;
+            }
+          }
+        }
+      }
+    }
+  });
+</script>
+{% endblock %}

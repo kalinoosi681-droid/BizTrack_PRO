@@ -1,97 +1,108 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>BizTrack PRO - Routes</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        /* Minimal override for table/CLI area */
-        .cli-container {
-            background-color: #1e1e2f;
-            color: #cfd8dc;
-            padding: 1rem;
-            border-radius: 8px;
-            font-family: monospace;
-            margin-top: 1rem;
-        }
-        .cli-input {
-            width: 100%;
-            padding: 0.5rem;
-            border-radius: 4px;
-            border: 1px solid #555;
-            background-color: #2a2a3a;
-            color: #cfd8dc;
-        }
-        .cli-output {
-            margin-top: 1rem;
-            white-space: pre-wrap;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        .dark-mode-toggle {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body>
-<button class="dark-mode-toggle" onclick="toggleDarkMode()">🌙</button>
-<main>
-    <h1>Routes / CLI</h1>
-    <p>Enter a command below and press Enter:</p>
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="mb-4">System Routes & CLI</h2>
 
-    <div class="cli-container">
-        <input type="text" id="cliCommand" class="cli-input" placeholder="Type command (e.g., show routes, help)">
-        <div id="cliOutput" class="cli-output"></div>
-    </div>
+<!-- Routes Reference -->
+<div class="card shadow-sm border-0 animate__animated animate__fadeIn">
+  <div class="card-body">
+    <h5 class="card-title">Available Commands</h5>
+    <ul class="list-group list-group-flush">
+      {% for r in routes %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-terminal text-primary me-2"></i>{{ r.name }}</span>
+        <small class="text-muted">{{ r.description }}</small>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
 
-    <script>
-        const cliInput = document.getElementById('cliCommand');
-        const cliOutput = document.getElementById('cliOutput');
+<!-- CLI Terminal -->
+<h3 class="mt-4">Run CLI Command</h3>
+<div id="cli-terminal" class="bg-dark text-light p-3 rounded shadow-sm animate__animated animate__fadeIn" 
+     style="height:300px; overflow-y:auto; font-family:monospace;">
+    <div>> Welcome to BizTrack CLI</div>
+</div>
 
-        cliInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const cmd = cliInput.value.trim();
-                if (!cmd) return;
+<!-- CLI Form with Autocomplete -->
+<form id="cli-form" class="mt-2 d-flex w-100">
+  <div class="position-relative w-100">
+    <input type="text" id="command" class="form-control me-2" placeholder="Enter command" autocomplete="off">
+    <div id="cli-suggest" class="list-group position-absolute w-100" style="z-index:1070;"></div>
+  </div>
+  <button class="btn btn-primary">Run</button>
+</form>
 
-                // Basic CLI emulation
-                let response = '';
-                switch(cmd.toLowerCase()) {
-                    case 'help':
-                        response = 'Available commands:\n - help\n - show routes\n - clear';
-                        break;
-                    case 'show routes':
-                        response = 'Dashboard | Products | Customers | Invoices | Top Sellers | Utilities';
-                        break;
-                    case 'clear':
-                        cliOutput.innerHTML = '';
-                        cliInput.value = '';
-                        return;
-                    default:
-                        response = `Unknown command: ${cmd}`;
-                }
+<script>
+(function() {
+  const input = document.getElementById("command");
+  const terminal = document.getElementById("cli-terminal");
+  const history = [];
+  let index = -1;
 
-                cliOutput.innerHTML += `> ${cmd}\n${response}\n`;
-                cliOutput.scrollTop = cliOutput.scrollHeight;
-                cliInput.value = '';
-            }
-        });
+  // History navigation (↑ / ↓)
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp") {
+      if (history.length) {
+        index = Math.max(0, index - 1);
+        input.value = history[index];
+      }
+      e.preventDefault();
+    } else if (e.key === "ArrowDown") {
+      if (history.length) {
+        index = Math.min(history.length - 1, index + 1);
+        input.value = history[index];
+      }
+      e.preventDefault();
+    } else if (e.key === "Enter") {
+      index = history.length;
+    }
+  });
 
-        function toggleDarkMode() {
-            document.body.classList.toggle('dark-mode');
-            if(document.body.classList.contains('dark-mode')) {
-                document.body.style.backgroundColor = '#121212';
-                document.body.style.color = '#cfd8dc';
-            } else {
-                document.body.style.backgroundColor = '#fff';
-                document.body.style.color = '#111';
-            }
-        }
-    </script>
-</main>
-</body>
-</html>
+  // Submit handler
+  document.getElementById("cli-form").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const cmd = input.value.trim();
+    if (!cmd) return;
+
+    history.push(cmd);
+    index = history.length;
+
+    terminal.innerHTML += `<div>> ${cmd}</div>`;
+    terminal.innerHTML += `<div class="text-warning">Running...</div>`;
+
+    const res = await fetch("{{ url_for('main.run_command') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: cmd })
+    });
+    const data = await res.json();
+    terminal.innerHTML += `<div>${data.output}</div>`;
+    terminal.scrollTop = terminal.scrollHeight;
+    input.value = "";
+  });
+
+  // Autocomplete suggestions
+  const allowed = {{ routes|map(attribute='name')|list|tojson }};
+  const suggest = document.getElementById("cli-suggest");
+
+  input.addEventListener("input", () => {
+    const q = input.value.toLowerCase();
+    suggest.innerHTML = "";
+    if (!q) return;
+    allowed.filter(c => c.startsWith(q)).slice(0,5).forEach(c => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "list-group-item list-group-item-action";
+      item.textContent = c;
+      item.onclick = () => { input.value = c; suggest.innerHTML = ""; };
+      suggest.appendChild(item);
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!suggest.contains(e.target) && e.target !== input) suggest.innerHTML = "";
+  });
+})();
+</script>
+{% endblock %}

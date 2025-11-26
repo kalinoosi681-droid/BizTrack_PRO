@@ -1,29 +1,117 @@
 {% extends "layout.html" %}
 {% block content %}
-<h2>Invoices</h2>
-<form id="invoice-form" method="POST">
-    <label for="customer_id">Customer ID:</label>
-    <input type="number" name="customer_id" placeholder="Customer ID" required>
-    <textarea name="items[]" placeholder='Items JSON [{"pid":1,"qty":2,"price":5.0}]' required></textarea>
-    <button type="submit">Record Sale</button>
-</form>
+<h2 class="mb-4">Invoices</h2>
 
-<table>
-    <thead>
+<div class="row">
+  <!-- Add Invoice Form -->
+  <div class="col-md-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-bold">Create Invoice</div>
+      <div class="card-body">
+        <form method="POST">
+          {{ add_form.hidden_tag() }}
+          <div class="mb-3">
+            {{ add_form.customer_id.label }} 
+            {{ add_form.customer_id(class="form-control") }}
+          </div>
+          {{ add_form.submit(class="btn btn-primary") }}
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Invoice Form -->
+  <div class="col-md-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-bold">Delete Invoice</div>
+      <div class="card-body">
+        <form method="POST">
+          {{ delete_form.hidden_tag() }}
+          <div class="mb-3">
+            {{ delete_form.id.label }} 
+            {{ delete_form.id(class="form-control") }}
+          </div>
+          {{ delete_form.submit(class="btn btn-danger") }}
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Invoice Table -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-bold">Invoice List</div>
+  <div class="card-body">
+    <table class="table table-striped table-hover align-middle">
+      <thead class="table-light">
         <tr>
-            <th>ID</th><th>Invoice Number</th><th>Customer ID</th><th>Total</th><th>Date</th>
+          <th>ID</th>
+          <th>Customer ID</th>
+          <th>Date</th>
+          <th>Total</th>
         </tr>
-    </thead>
-    <tbody>
-        {% for i in invoices %}
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
         <tr>
-            <td>{{ i.id }}</td>
-            <td>{{ i.invoice_number }}</td>
-            <td>{{ i.customer_id }}</td>
-            <td>{{ i.total }}</td>
-            <td>{{ i.date }}</td>
+          <td>{{ inv.id }}</td>
+          <td>{{ inv.customer_id }}</td>
+          <td>{{ inv.created_at }}</td>
+          <td>${{ "%.2f"|format(inv.total) if inv.total is defined else "0.00" }}</td>
         </tr>
         {% endfor %}
-    </tbody>
-</table>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Invoice Chart -->
+<div class="card shadow-sm">
+  <div class="card-header fw-bold">Monthly Invoice Totals</div>
+  <div class="card-body">
+    <canvas id="invoiceChart"></canvas>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const months = ["Jan", "Feb", "Mar", "Apr", "May"];
+  const totals = [1200, 1500, 1800, 1700, 2000]; // placeholder data
+
+  new Chart(document.getElementById("invoiceChart"), {
+    type: "bar",
+    data: {
+      labels: months,
+      datasets: [{
+        label: "Invoice Totals ($)",
+        data: totals,
+        backgroundColor: "#198754",
+        borderRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return "$" + context.formattedValue;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(value) {
+              return "$" + value;
+            }
+          }
+        }
+      }
+    }
+  });
+</script>
 {% endblock %}

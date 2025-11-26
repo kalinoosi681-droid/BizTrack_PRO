@@ -1,31 +1,92 @@
 {% extends "layout.html" %}
 {% block content %}
-<h2>Utilities</h2>
-<ul>
-    {% for u in utilities %}
-    <li>{{ u.name }}</li>
-    {% endfor %}
-</ul>
+<h2 class="mb-4">Utilities</h2>
 
-<h3>Run CLI Command</h3>
-<form id="cli-form">
-    <input type="text" name="command" id="command" placeholder="Enter command">
-    <button type="submit">Run</button>
+<!-- Terminal -->
+<div id="cli-terminal" class="bg-dark text-light p-3 rounded shadow-sm animate__animated animate__fadeIn" 
+     style="height:300px; overflow-y:auto; font-family:monospace;">
+    <div>> Welcome to BizTrack CLI</div>
+</div>
+
+<!-- CLI Form with Autocomplete -->
+<form id="cli-form" class="mt-2 d-flex w-100">
+  <div class="position-relative w-100">
+    <input type="text" id="command" class="form-control me-2" placeholder="Enter command" autocomplete="off">
+    <div id="cli-suggest" class="list-group position-absolute w-100" style="z-index:1070;"></div>
+  </div>
+  <button class="btn btn-primary">Run</button>
 </form>
-<pre id="cli-output"></pre>
 
 <script>
-document.getElementById("cli-form").addEventListener("submit", async function(e){
-    e.preventDefault();
-    const cmd = document.getElementById("command").value;
-    const res = await fetch("{{url_for('run_command')}}""
+(function() {
+  const input = document.getElementById("command");
+  const terminal = document.getElementById("cli-terminal");
+  const history = [];
+  let index = -1;
 
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({command: cmd})
+  // History navigation (↑ / ↓)
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp") {
+      if (history.length) {
+        index = Math.max(0, index - 1);
+        input.value = history[index];
+      }
+      e.preventDefault();
+    } else if (e.key === "ArrowDown") {
+      if (history.length) {
+        index = Math.min(history.length - 1, index + 1);
+        input.value = history[index];
+      }
+      e.preventDefault();
+    } else if (e.key === "Enter") {
+      index = history.length;
+    }
+  });
+
+  // Submit handler
+  document.getElementById("cli-form").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const cmd = input.value.trim();
+    if (!cmd) return;
+
+    history.push(cmd);
+    index = history.length;
+
+    terminal.innerHTML += `<div>> ${cmd}</div>`;
+    terminal.innerHTML += `<div class="text-warning">Running...</div>`;
+
+    const res = await fetch("{{ url_for('main.run_command') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: cmd })
     });
     const data = await res.json();
-    document.getElementById("cli-output").textContent = data.output;
-});
+    terminal.innerHTML += `<div>${data.output}</div>`;
+    terminal.scrollTop = terminal.scrollHeight;
+    input.value = "";
+  });
+
+  // Autocomplete suggestions
+  const allowed = {{ utilities|tojson }};
+  const suggest = document.getElementById("cli-suggest");
+
+  input.addEventListener("input", () => {
+    const q = input.value.toLowerCase();
+    suggest.innerHTML = "";
+    if (!q) return;
+    allowed.filter(c => c.startsWith(q)).slice(0,5).forEach(c => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "list-group-item list-group-item-action";
+      item.textContent = c;
+      item.onclick = () => { input.value = c; suggest.innerHTML = ""; };
+      suggest.appendChild(item);
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!suggest.contains(e.target) && e.target !== input) suggest.innerHTML = "";
+  });
+})();
 </script>
 {% endblock %}

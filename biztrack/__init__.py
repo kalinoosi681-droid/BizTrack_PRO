@@ -13,8 +13,6 @@ from biztrack.config import config_map
 import logging
 import os
 
-csrf = CSRFProtect(app=None)
-
 def create_app(config_name=None):
     
     """Flask application factory with proper configuration"""

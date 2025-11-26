@@ -1,43 +1,81 @@
 {% extends "layout.html" %}
 {% block content %}
-<h2>Products</h2>
-<form id="product-form" method="POST">
-    <input type="hidden" name="action" value="add">
-    <input type="text" name="name" placeholder="Product Name" required>
-    <input type="text" name="category" placeholder="Category">
-    <input type="number" name="qty" placeholder="Quantity" min="0" required>
-    <input type="number" step="0.01" name="price" placeholder="Price" min="0" required>
-    <button type="submit">Add Product</button>
-</form>
+<h2 class="mb-4">Products</h2>
 
-<table>
-    <thead>
+<div class="row">
+  <!-- Add Product Form -->
+  <div class="col-md-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-bold">Add Product</div>
+      <div class="card-body">
+        <form method="POST">
+          {{ add_form.hidden_tag() }}
+          <div class="mb-3">
+            {{ add_form.name.label }} 
+            {{ add_form.name(class="form-control") }}
+          </div>
+          <div class="mb-3">
+            {{ add_form.category.label }} 
+            {{ add_form.category(class="form-control") }}
+          </div>
+          <div class="mb-3">
+            {{ add_form.qty.label }} 
+            {{ add_form.qty(class="form-control") }}
+          </div>
+          <div class="mb-3">
+            {{ add_form.price.label }} 
+            {{ add_form.price(class="form-control") }}
+          </div>
+          {{ add_form.submit(class="btn btn-primary") }}
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Product Form -->
+  <div class="col-md-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-bold">Delete Product</div>
+      <div class="card-body">
+        <form method="POST">
+          {{ delete_form.hidden_tag() }}
+          <div class="mb-3">
+            {{ delete_form.id.label }} 
+            {{ delete_form.id(class="form-control") }}
+          </div>
+          {{ delete_form.submit(class="btn btn-danger") }}
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Product Table -->
+<div class="card shadow-sm">
+  <div class="card-header fw-bold">Product List</div>
+  <div class="card-body">
+    <table class="table table-striped table-hover align-middle">
+      <thead class="table-light">
         <tr>
-            <th>ID</th><th>Name</th><th>Category</th><th>Qty</th><th>Price</th><th>Actions</th>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Quantity</th>
+          <th>Price</th>
         </tr>
-    </thead>
-    <tbody>
+      </thead>
+      <tbody>
         {% for p in products %}
         <tr>
-            <td>{{ p.id }}</td>
-            <td>{{ p.name }}</td>
-            <td>{{ p.category }}</td>
-            <td>{{ p.qty }}</td>
-            <td>{{ p.price }}</td>
-            <td>
-                <form style="display:inline" method="POST">
-                    <input type="hidden" name="action" value="update">
-                    <input type="hidden" name="id" value="{{ p.id }}">
-                    <button type="submit">Update</button>
-                </form>
-                <form style="display:inline" method="POST">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="id" value="{{ p.id }}">
-                    <button type="submit" onclick="return confirm('Delete this product?')">Delete</button>
-                </form>
-            </td>
+          <td>{{ p.id }}</td>
+          <td>{{ p.name }}</td>
+          <td>{{ p.category }}</td>
+          <td>{{ p.qty }}</td>
+          <td>${{ "%.2f"|format(p.price) }}</td>
         </tr>
         {% endfor %}
-    </tbody>
-</table>
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}

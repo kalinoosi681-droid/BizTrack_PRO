@@ -1,4 +1,11 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from .auth import login_required
+from biztrack.forms import  (
+    CustomerAddForm, CustomerDeleteForm,
+    ProductAddForm, ProductDeleteForm,
+    InvoiceAddForm, InvoiceDeleteForm
+)
+from .biztrack_db import get_top_sellers
 from .biztrack_db import (
     init_db, seed_default_data,
     get_products, get_customers, get_invoices, get_top_sellers, get_utilities,
@@ -7,180 +14,185 @@ from .biztrack_db import (
     record_sale, delete_sale, get_sale_details,
     execute_command
 )
-from .auth import login_required
 
-# Blueprint for main routes
+
+# Blueprint
 main = Blueprint("main", __name__)
-cli = Blueprint("cli", __name__)
 
-# Initialize DB and seed default data
+# Initialize DB and seed defaults
 init_db()
 seed_default_data()
 
 # -----------------------
-# Main pages
+# Dashboard
 # -----------------------
-
 @main.route("/")
 @login_required
 def dashboard():
     products = get_products()
     invoices = get_invoices()
-    return render_template("index.html", products=products, invoices=invoices)
+    customers = get_customers()
 
-# ========================================
-# Add input validation function
-def validate_product_data(name, category, qty, price):
-    """Validate product input data"""
-    errors = []
-    
-    if not name or len(name.strip()) < 2:
-        errors.append("Product name must be at least 2 characters")
-    
-    if len(name) > 200:
-        errors.append("Product name too long (max 200 characters)")
-    
-    if category and len(category) > 100:
-        errors.append("Category too long (max 100 characters)")
-    
-    try:
-        qty = int(qty)
-        if qty < 0:
-            errors.append("Quantity cannot be negative")
-    except (ValueError, TypeError):
-        errors.append("Quantity must be a valid number")
-    
-    try:
-        price = float(price)
-        if price < 0:
-            errors.append("Price cannot be negative")
-        if price > 999999.99:
-            errors.append("Price too large")
-    except (ValueError, TypeError):
-        errors.append("Price must be a valid number")
-    
-    return errors
-# ========================================
+    # KPI counts
+    total_sales = 8200  # placeholder, replace with aggregation query
+    customer_count = len(customers)
+    product_count = len(products)
+    invoice_count = len(invoices)
 
+    return render_template(
+        "index.html",
+        products=products,
+        invoices=invoices,
+        customers=customers,
+        total_sales=total_sales,
+        customer_count=customer_count,
+        product_count=product_count,
+        invoice_count=invoice_count
+    )
 
-# Update products route
+# -----------------------
+# Dashboard API Endpoints
+# -----------------------
+@main.route("/api/dashboard/sales")
+@login_required
+def api_dashboard_sales():
+    months = ["Jan", "Feb", "Mar", "Apr", "May"]
+    sales = [1200, 1500, 1800, 1700, 2000]
+    return jsonify({"months": months, "sales": sales})
+
+@main.route("/api/dashboard/categories")
+@login_required
+def api_dashboard_categories():
+    categories = ["Electronics", "Clothing", "Books", "Food"]
+    counts = [40, 25, 15, 20]
+    return jsonify({"categories": categories, "counts": counts})
+
+# -----------------------
+# Products
+# -----------------------
 @main.route("/products", methods=["GET", "POST"])
 @login_required
 def products():
-    if request.method == "POST":
-        action = request.form.get("action")
-        pid = request.form.get("id")
-        name = request.form.get("name", "").strip()
-        category = request.form.get("category", "").strip()
-        qty = request.form.get("qty")
-        price = request.form.get("price")
-        
-        # Validate input
-        errors = validate_product_data(name, category, qty, price)
-        if errors:
-            for error in errors:
-                flash(error, "error")
-            return redirect(url_for("main.products"))
-        
-        qty = int(qty)
-        price = float(price)
-        
+    add_form = ProductAddForm()
+    delete_form = ProductDeleteForm()
+
+    if add_form.validate_on_submit() and getattr(add_form, "action", None) and add_form.action.data == "add":
         try:
-            if action == "add":
-                if add_product(name, category, qty, price):
-                    flash("Product added successfully", "success")
-                else:
-                    flash("Failed to add product", "error")
-            elif action == "update" and pid:
-                if update_product(int(pid), name, category, qty, price):
-                    flash("Product updated successfully", "success")
-                else:
-                    flash("Failed to update product", "error")
-            elif action == "delete" and pid:
-                if delete_product(int(pid)):
-                    flash("Product deleted successfully", "success")
-                else:
-                    flash("Failed to delete product", "error")
+            add_product(add_form.name.data, add_form.category.data,
+                        add_form.qty.data, add_form.price.data)
+            flash("Product added successfully", "success")
         except Exception as e:
             flash(f"Error: {str(e)}", "error")
-            
         return redirect(url_for("main.products"))
-    
-    products = get_products()
-    return render_template("products.html", products=products)
 
+    if delete_form.validate_on_submit() and getattr(delete_form, "action", None) and delete_form.action.data == "delete":
+        try:
+            delete_product(int(delete_form.id.data))
+            flash("Product deleted successfully", "success")
+        except Exception as e:
+            flash(f"Error: {str(e)}", "error")
+        return redirect(url_for("main.products"))
+
+    products = get_products()
+    return render_template("products.html", products=products,
+                           add_form=add_form, delete_form=delete_form)
+
+# -----------------------
+# Customers
+# -----------------------
 @main.route("/customers", methods=["GET", "POST"])
 @login_required
 def customers():
-    if request.method == "POST":
-        action = request.form.get("action")
-        cid = request.form.get("id")
-        name = request.form.get("name")
-        phone = request.form.get("phone")
-        email = request.form.get("email")
+    add_form = CustomerAddForm()
+    delete_form = CustomerDeleteForm()
 
-        if action == "add":
-            add_customer(name, phone, email)
+    if add_form.validate_on_submit() and add_form.action.data == "add":
+        try:
+            add_customer(add_form.name.data, add_form.phone.data, add_form.email.data)
             flash("Customer added successfully", "success")
-        elif action == "update" and cid:
-            update_customer(int(cid), name, phone, email)
-            flash("Customer updated successfully", "success")
-        elif action == "delete" and cid:
-            delete_customer(int(cid))
+        except Exception as e:
+            flash(f"Error: {str(e)}", "error")
+        return redirect(url_for("main.customers"))
+
+    if delete_form.validate_on_submit() and delete_form.action.data == "delete":
+        try:
+            delete_customer(int(delete_form.id.data))
             flash("Customer deleted successfully", "success")
+        except Exception as e:
+            flash(f"Error: {str(e)}", "error")
         return redirect(url_for("main.customers"))
 
     customers = get_customers()
-    return render_template("customers.html", customers=customers)
+    return render_template("customers.html", customers=customers,
+                           add_form=add_form, delete_form=delete_form)
 
+# -----------------------
+# Invoices
+# -----------------------
 @main.route("/invoices", methods=["GET", "POST"])
 @login_required
 def invoices():
-    if request.method == "POST":
-        customer_id = request.form.get("customer_id")
-        items = request.form.getlist("items[]")  # expects JSON objects or dictionaries
-        # Example: items = [{"pid":1,"qty":2,"price":5.0}]
-        invoice_id = record_sale(int(customer_id), items)
-        flash(f"Invoice {invoice_id} created successfully", "success")
+    add_form = InvoiceAddForm()
+    delete_form = InvoiceDeleteForm()
+
+    if add_form.validate_on_submit():
+        try:
+            invoice_id = record_sale(add_form.customer_id.data, add_form.items.data)
+            flash(f"Invoice {invoice_id} created successfully", "success")
+        except Exception as e:
+            flash(f"Error: {str(e)}", "error")
+        return redirect(url_for("main.invoices"))
+
+    if delete_form.validate_on_submit() and delete_form.action.data == "delete":
+        try:
+            delete_sale(int(delete_form.id.data))
+            flash("Invoice deleted successfully", "success")
+        except Exception as e:
+            flash(f"Error: {str(e)}", "error")
         return redirect(url_for("main.invoices"))
 
     invoices = get_invoices()
-    return render_template("invoices.html", invoices=invoices)
+    return render_template("invoices.html", invoices=invoices,
+                           add_form=add_form, delete_form=delete_form)
 
-@main.route("/top_sellers")
+# -----------------------
+# Top Sellers
+# -----------------------
+@main.route("/top-sellers")
 @login_required
 def top_sellers():
     top = get_top_sellers()
-    return render_template("top_sellers.html", top_sellers=top)
+    return render_template("top-sellers.html", top_sellers=top)
 
-@main.route("/utils", methods=["GET", "POST"])
+# -----------------------
+# Utilities (CLI)
+# -----------------------
+@main.route("/utils")
 @login_required
 def utils():
     utilities = get_utilities()
-    if request.method == "POST":
-        command = request.form.get("command", "")
-        output = execute_command(command)
-        flash(output)
-        return redirect(url_for("main.utils"))
     return render_template("utils.html", utilities=utilities)
 
-# -----------------------
-# CLI AJAX route
-# -----------------------
-
-@cli.route("/run_command", methods=["POST"])
+@main.route("/run_command", methods=["POST"])
 @login_required
 def run_command():
-    data = request.json
-    cmd = data.get("command", "")
-    output = execute_command(cmd)
-    return jsonify({"output": output})
-# -----------------------
-@cli.route("/run-command")
-def run_command():
-    from .biztrack_db import execute_command
     data = request.get_json()
     cmd = data.get("command", "")
     output = execute_command(cmd)
     return jsonify({"output": output})
+
 # -----------------------
+# Routes Reference
+# -----------------------
+@main.route("/routes")
+@login_required
+def routes_page():
+    routes = [
+        {"name": "dashboard", "description": "Main dashboard overview"},
+        {"name": "customers", "description": "Manage customers"},
+        {"name": "products", "description": "Manage products"},
+        {"name": "invoices", "description": "View invoices"},
+        {"name": "utils", "description": "Run CLI commands"},
+        {"name": "top-sellers", "description": "View top selling products"},
+    ]
+    return render_template("routes.html", routes=routes)

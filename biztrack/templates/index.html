@@ -1,14 +1,96 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Dashboard</h1>
-<div class="cards">
-    <div class="card">Products: {{ products|length }}</div>
-    <div class="card">Invoices: {{ invoices|length }}</div>
+<h2 class="mb-4">Dashboard</h2>
+
+<!-- KPI Cards -->
+<div class="row mb-4">
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted">Total Sales</h6>
+        <h4 class="fw-bold">${{ total_sales }}</h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted">Customers</h6>
+        <h4 class="fw-bold">{{ customer_count }}</h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted">Products</h6>
+        <h4 class="fw-bold">{{ product_count }}</h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted">Invoices</h6>
+        <h4 class="fw-bold">{{ invoice_count }}</h4>
+      </div>
+    </div>
+  </div>
 </div>
 
-<style>
-.cards { display:flex; gap:20px; flex-wrap:wrap; margin-top:20px; }
-.card { flex:1; min-width:150px; background:#1f1f1f; padding:20px; border-radius:8px; text-align:center; }
-.card:hover { background:#333; }
-</style>
+<!-- Charts -->
+<div class="row">
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Monthly Sales</div>
+      <div class="card-body">
+        <canvas id="salesChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Product Categories</div>
+      <div class="card-body">
+        <canvas id="categoriesChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  fetch("{{ url_for('main.api_dashboard_sales') }}")
+    .then(res => res.json())
+    .then(data => {
+      new Chart(document.getElementById("salesChart"), {
+        type: "line",
+        data: {
+          labels: data.months,
+          datasets: [{
+            label: "Sales",
+            data: data.sales,
+            borderColor: "#0d6efd",
+            backgroundColor: "rgba(13,110,253,0.1)",
+            fill: true
+          }]
+        }
+      });
+    });
+
+  fetch("{{ url_for('main.api_dashboard_categories') }}")
+    .then(res => res.json())
+    .then(data => {
+      new Chart(document.getElementById("categoriesChart"), {
+        type: "doughnut",
+        data: {
+          labels: data.categories,
+          datasets: [{
+            data: data.counts,
+            backgroundColor: ["#0d6efd", "#198754", "#ffc107", "#dc3545"]
+          }]
+        }
+      });
+    });
+</script>
 {% endblock %}

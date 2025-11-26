@@ -1,80 +1,99 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
-    <meta charset="UTF-8">
-    <title>BizTrack PRO</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <style>
-        body { background-color: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
-        nav { display:flex; gap: 15px; padding: 10px; background: #1f1f1f; }
-        nav a { color: #e0e0e0; text-decoration: none; font-weight: bold; }
-        nav a:hover { color: #00bcd4; }
-        .flashes { list-style: none; padding:0; margin:10px 0; }
-        .flashes li { padding:8px 12px; margin-bottom:4px; border-radius:4px; }
-        .success { background-color:#4caf50; color:white; }
-        .error { background-color:#f44336; color:white; }
-        .container { padding:20px; max-width:1200px; margin:auto; }
-        .darkmode { background-color:#121212; color:#e0e0e0; }
-        .lightmode { background-color:#f5f5f5; color:#212121; }
-        .toggle-switch { cursor:pointer; margin-left:auto; padding:0 10px; }
-    </style>
-    <button id="theme-toggle">Toggle Dark/Light</button>
-    <script>
-        const themeBtn = document.getElementById("theme-toggle");
-        const darkMode = localStorage.getItem("darkMode") === "true";
-        document.body.classList.toggle("dark", darkMode);
-
-        themeBtn.addEventListener("click", () => {
-        document.body.classList.toggle("dark");
-        localStorage.setItem("darkMode", document.body.classList.contains("dark"));
-   });
-    </script>
-    <style>
-        body.dark { background:#121212; color:#eee; }
-        body.dark table { color:#eee; }
-        button { cursor:pointer; }
-    </style>
+  <meta charset="UTF-8">
+  <title>BizTrack PRO</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
 </head>
 <body>
-<nav>
-    <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
-    <a href="{{ url_for('main.products') }}">Products</a>
-    <a href="{{ url_for('main.customers') }}">Customers</a>
-    <a href="{{ url_for('main.invoices') }}">Invoices</a>
-    <a href="{{ url_for('main.top_sellers') }}">Top Sellers</a>
-    <a href="{{ url_for('main.utils') }}">Utilities</a>
-    <a href="{{ url_for('auth.logout') }}">Logout</a>
-    <span class="toggle-switch" onclick="toggleDarkMode()">🌓</span>
-</nav>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold" href="{{ url_for('main.dashboard') }}">BizTrack PRO</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
 
-<div class="container">
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.products') }}">Products</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.customers') }}">Customers</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.invoices') }}">Invoices</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.top_sellers') }}">Top Sellers</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.utils') }}">Utilities</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.routes_page') }}">Routes</a></li>
+        </ul>
+
+        <ul class="navbar-nav align-items-center gap-2">
+          <!-- Theme toggle -->
+          <li class="nav-item">
+            <button id="themeToggle" class="btn btn-outline-light btn-sm" type="button" aria-label="Toggle theme">
+              <span id="themeIcon">🌙</span> <span id="themeLabel" class="ms-1">Dark</span>
+            </button>
+          </li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Flash messages -->
+  <div class="container mt-3">
     {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <ul class="flashes">
-            {% for category, msg in messages %}
-                <li class="{{ category }}">{{ msg }}</li>
-            {% endfor %}
-            </ul>
-        {% endif %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
     {% endwith %}
+  </div>
 
+  <!-- Page Content -->
+  <div class="container mt-4">
     {% block content %}{% endblock %}
-</div>
+  </div>
 
-<script>
-    // Dark / Light mode toggle
-    function toggleDarkMode() {
-        const body = document.body;
-        const mode = body.classList.contains('darkmode') ? 'lightmode' : 'darkmode';
-        body.className = mode;
-        localStorage.setItem('mode', mode);
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    (function initTheme() {
+      const saved = localStorage.getItem('bt-theme');
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = saved || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-bs-theme', theme);
+      updateToggleUI(theme);
+    })();
+
+    document.getElementById('themeToggle').addEventListener('click', function () {
+      const current = document.documentElement.getAttribute('data-bs-theme') || 'light';
+      const next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-bs-theme', next);
+      localStorage.setItem('bt-theme', next);
+      updateToggleUI(next);
+    });
+
+    function updateToggleUI(theme) {
+      const iconEl = document.getElementById('themeIcon');
+      const labelEl = document.getElementById('themeLabel');
+      if (theme === 'dark') {
+        iconEl.textContent = '☀️';
+        labelEl.textContent = 'Light';
+      } else {
+        iconEl.textContent = '🌙';
+        labelEl.textContent = 'Dark';
+      }
+      const nav = document.querySelector('.navbar');
+      if (theme === 'dark') {
+        nav.classList.remove('bg-primary');
+        nav.classList.add('bg-dark');
+      } else {
+        nav.classList.remove('bg-dark');
+        nav.classList.add('bg-primary');
+      }
     }
-    window.onload = () => {
-        const savedMode = localStorage.getItem('mode') || 'darkmode';
-        document.body.className = savedMode;
-    }
-</script>
+  </script>
 </body>
 </html>
