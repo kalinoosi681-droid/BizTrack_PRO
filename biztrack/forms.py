@@ -81,6 +81,14 @@ class PayrollAddForm(FlaskForm):
     salary = FloatField("Salary", validators=[DataRequired(), NumberRange(min=0)])
     date = DateField("Date", validators=[DataRequired()], format='%Y-%m-%d')
     submit = SubmitField("Add Payroll")
+    
+class PayrollUpdateForm(FlaskForm):
+    action = HiddenField(default="update")
+    id = IntegerField("Payroll ID", validators=[DataRequired()])
+    employee_name = StringField("Employee Name", validators=[DataRequired()])
+    salary = FloatField("Salary", validators=[DataRequired(), NumberRange(min=0)])
+    date = DateField("Date", validators=[DataRequired()], format='%Y-%m-%d')
+    submit = SubmitField("Update Payroll")
 
 class PayrollDeleteForm(FlaskForm):
     action = HiddenField(default="delete")

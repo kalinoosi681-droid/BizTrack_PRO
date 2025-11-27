@@ -425,8 +425,12 @@ def get_low_stock_products() -> List[Tuple[int, str, int, int]]:
 # Customer CRUD
 # ============================
 def get_customers() -> list[dict]:
+    """Returns all customers as list of dicts"""
     rows = execute_query("SELECT * FROM customers;", fetch=True)
-    columns = _get_columns("customers")
+    cursor = get_connection().cursor()
+    cursor.execute("PRAGMA table_info(customers)")
+    columns = [col[1] for col in cursor.fetchall()]
+    cursor.close()
     return [dict(zip(columns, row)) for row in rows]
 
 def add_customer(name: str, phone: str, email: str) -> bool:

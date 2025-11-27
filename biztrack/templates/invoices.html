@@ -1,13 +1,13 @@
 
 {% extends "layout.html" %}
 {% block content %}
-<h2 class="mb-4">Invoices</h2>
+<h2 class="mb-4">Invoice Management</h2>
 
 <div class="row">
   <!-- Create Invoice Form -->
-  <div class="col-md-8">
+  <div class="col-md-6">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold">Create Invoice</div>
+      <div class="card-header fw-bold bg-primary text-white">Create Invoice</div>
       <div class="card-body">
         <form method="POST">
           {{ add_form.hidden_tag() }}
@@ -15,47 +15,87 @@
           
           <div class="mb-3">
             {{ add_form.customer_id.label(class="form-label") }}
-            {{ add_form.customer_id(class="form-control") }}
+            {{ add_form.customer_id(class="form-control", placeholder="Customer ID") }}
           </div>
 
-          <h6 class="fw-bold">Invoice Items</h6>
+          <h6 class="fw-bold mt-3">Invoice Items</h6>
+          <small class="text-muted">Add at least one item</small>
+          
           {% for item_form in add_form.items %}
-          <div class="row mb-2">
+          <div class="row mb-2 border-bottom pb-2">
             <div class="col-md-4">
               {{ item_form.pid.label(class="form-label") }}
-              {{ item_form.pid(class="form-control") }}
+              {{ item_form.pid(class="form-control", placeholder="Product ID") }}
             </div>
             <div class="col-md-4">
               {{ item_form.qty.label(class="form-label") }}
-              {{ item_form.qty(class="form-control") }}
+              {{ item_form.qty(class="form-control", placeholder="Quantity") }}
             </div>
             <div class="col-md-4">
               {{ item_form.price.label(class="form-label") }}
-              {{ item_form.price(class="form-control", step="0.01") }}
+              {{ item_form.price(class="form-control", step="0.01", placeholder="0.00") }}
             </div>
           </div>
           {% endfor %}
 
-          {{ add_form.submit(class="btn btn-primary mt-3") }}
+          {{ add_form.submit(class="btn btn-primary w-100 mt-3") }}
         </form>
       </div>
     </div>
   </div>
 
-  <!-- Delete Invoice Form -->
-  <div class="col-md-4">
-    <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold">Delete Invoice</div>
-      <div class="card-body">
-        <form method="POST">
-          {{ delete_form.hidden_tag() }}
-          <input type="hidden" name="action" value="delete">
-          <div class="mb-3">
-            {{ delete_form.id.label(class="form-label") }}
-            {{ delete_form.id(class="form-control") }}
+  <div class="col-md-6">
+    <div class="row">
+      <!-- Update Invoice Form -->
+      <div class="col-12">
+        <div class="card shadow-sm mb-4">
+          <div class="card-header fw-bold bg-warning text-dark">Update Invoice Total</div>
+          <div class="card-body">
+            <form method="POST">
+              {{ update_form.hidden_tag() }}
+              <input type="hidden" name="action" value="update">
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  {{ update_form.id.label(class="form-label") }}
+                  {{ update_form.id(class="form-control", placeholder="Invoice ID") }}
+                </div>
+                <div class="col-md-6 mb-3">
+                  {{ update_form.customer_id.label(class="form-label") }}
+                  {{ update_form.customer_id(class="form-control", placeholder="Customer ID") }}
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  {{ update_form.total.label(class="form-label") }}
+                  {{ update_form.total(class="form-control", step="0.01", placeholder="0.00") }}
+                </div>
+                <div class="col-md-6 mb-3">
+                  {{ update_form.date.label(class="form-label") }}
+                  {{ update_form.date(class="form-control", placeholder="YYYY-MM-DD HH:MM:SS") }}
+                </div>
+              </div>
+              {{ update_form.submit(class="btn btn-warning w-100") }}
+            </form>
           </div>
-          {{ delete_form.submit(class="btn btn-danger") }}
-        </form>
+        </div>
+      </div>
+
+      <!-- Delete Invoice Form -->
+      <div class="col-12">
+        <div class="card shadow-sm mb-4">
+          <div class="card-header fw-bold bg-danger text-white">Delete Invoice</div>
+          <div class="card-body">
+            <form method="POST" onsubmit="return confirm('Delete this invoice? This cannot be undone.');">
+              {{ delete_form.hidden_tag() }}
+              <input type="hidden" name="action" value="delete">
+              <div class="mb-3">
+                {{ delete_form.id.label(class="form-label") }}
+                {{ delete_form.id(class="form-control", placeholder="Invoice ID") }}
+              </div>
+              {{ delete_form.submit(class="btn btn-danger w-100") }}
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -63,30 +103,36 @@
 
 <!-- Invoice Table -->
 <div class="card shadow-sm mb-4">
-  <div class="card-header fw-bold">Invoice List</div>
+  <div class="card-header fw-bold">Invoice List ({{ invoices|length }} total)</div>
   <div class="card-body">
-    <table class="table table-striped table-hover align-middle">
-      <thead class="table-light">
-        <tr>
-          <th>ID</th>
-          <th>Invoice #</th>
-          <th>Customer ID</th>
-          <th>Total</th>
-          <th>Date</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for inv in invoices %}
-        <tr>
-          <td>{{ inv.id }}</td>
-          <td>{{ inv.invoice_number }}</td>
-          <td>{{ inv.customer_id }}</td>
-          <td>${{ "%.2f"|format(inv.total) if inv.total else "0.00" }}</td>
-          <td>{{ inv.date }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% if invoices %}
+    <div class="table-responsive">
+      <table class="table table-striped table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Invoice #</th>
+            <th>Customer ID</th>
+            <th>Total</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inv in invoices %}
+          <tr>
+            <td><span class="badge bg-secondary">{{ inv.id }}</span></td>
+            <td><code>{{ inv.invoice_number }}</code></td>
+            <td>{{ inv.customer_id }}</td>
+            <td class="text-success fw-bold">${{ "%.2f"|format(inv.total) if inv.total else "0.00" }}</td>
+            <td>{{ inv.date }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">No invoices found.</p>
+    {% endif %}
   </div>
 </div>
 
@@ -138,6 +184,7 @@
           }
         }
       });
-    });
+    })
+    .catch(err => console.error('Chart error:', err));
 </script>
 {% endblock %}

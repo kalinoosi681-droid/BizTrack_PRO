@@ -1,3 +1,4 @@
+
 {% extends "layout.html" %}
 {% block content %}
 <h2 class="mb-4">Customers</h2>
@@ -6,24 +7,24 @@
   <!-- Add Customer Form -->
   <div class="col-md-4">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold">Add Customer</div>
+      <div class="card-header fw-bold bg-primary text-white">Add Customer</div>
       <div class="card-body">
         <form method="POST">
           {{ add_form.hidden_tag() }}
           <input type="hidden" name="action" value="add">
           <div class="mb-3">
             {{ add_form.name.label(class="form-label") }}
-            {{ add_form.name(class="form-control") }}
+            {{ add_form.name(class="form-control", placeholder="Customer name") }}
           </div>
           <div class="mb-3">
             {{ add_form.phone.label(class="form-label") }}
-            {{ add_form.phone(class="form-control") }}
+            {{ add_form.phone(class="form-control", placeholder="Phone number") }}
           </div>
           <div class="mb-3">
             {{ add_form.email.label(class="form-label") }}
-            {{ add_form.email(class="form-control") }}
+            {{ add_form.email(class="form-control", placeholder="Email address") }}
           </div>
-          {{ add_form.submit(class="btn btn-primary") }}
+          {{ add_form.submit(class="btn btn-primary w-100") }}
         </form>
       </div>
     </div>
@@ -32,28 +33,28 @@
   <!-- Update Customer Form -->
   <div class="col-md-4">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold">Update Customer</div>
+      <div class="card-header fw-bold bg-warning text-dark">Update Customer</div>
       <div class="card-body">
         <form method="POST">
           {{ update_form.hidden_tag() }}
           <input type="hidden" name="action" value="update">
           <div class="mb-3">
             {{ update_form.id.label(class="form-label") }}
-            {{ update_form.id(class="form-control") }}
+            {{ update_form.id(class="form-control", placeholder="Customer ID") }}
           </div>
           <div class="mb-3">
             {{ update_form.name.label(class="form-label") }}
-            {{ update_form.name(class="form-control") }}
+            {{ update_form.name(class="form-control", placeholder="New name") }}
           </div>
           <div class="mb-3">
             {{ update_form.phone.label(class="form-label") }}
-            {{ update_form.phone(class="form-control") }}
+            {{ update_form.phone(class="form-control", placeholder="New phone") }}
           </div>
           <div class="mb-3">
             {{ update_form.email.label(class="form-label") }}
-            {{ update_form.email(class="form-control") }}
+            {{ update_form.email(class="form-control", placeholder="New email") }}
           </div>
-          {{ update_form.submit(class="btn btn-warning") }}
+          {{ update_form.submit(class="btn btn-warning w-100") }}
         </form>
       </div>
     </div>
@@ -62,48 +63,52 @@
   <!-- Delete Customer Form -->
   <div class="col-md-4">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold">Delete Customer</div>
+      <div class="card-header fw-bold bg-danger text-white">Delete Customer</div>
       <div class="card-body">
-        <form method="POST">
+        <form method="POST" onsubmit="return confirm('Are you sure you want to delete this customer?');">
           {{ delete_form.hidden_tag() }}
           <input type="hidden" name="action" value="delete">
           <div class="mb-3">
             {{ delete_form.id.label(class="form-label") }}
-            {{ delete_form.id(class="form-control") }}
+            {{ delete_form.id(class="form-control", placeholder="Customer ID") }}
           </div>
-          {{ delete_form.submit(class="btn btn-danger") }}
+          {{ delete_form.submit(class="btn btn-danger w-100") }}
         </form>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Product Table -->
+<!-- Customer Table - THIS WAS THE BUG -->
 <div class="card shadow-sm">
-  <div class="card-header fw-bold">Product List</div>
+  <div class="card-header fw-bold">Customer List ({{ customers|length }} total)</div>
   <div class="card-body">
-    <table class="table table-striped table-hover align-middle">
-      <thead class="table-light">
-        <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Category</th>
-          <th>Quantity</th>
-          <th>Price</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in products %}
-        <tr>
-          <td>{{ p.id }}</td>
-          <td>{{ p.name }}</td>
-          <td>{{ p.category }}</td>
-          <td>{{ p.qty }}</td>
-          <td>${{ "%.2f"|format(p.price) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% if customers %}
+    <div class="table-responsive">
+      <table class="table table-striped table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Email</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in customers %}
+          <tr>
+            <td><span class="badge bg-secondary">{{ c.id }}</span></td>
+            <td>{{ c.name }}</td>
+            <td>{{ c.phone or 'N/A' }}</td>
+            <td>{{ c.email or 'N/A' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">No customers found. Add your first customer above!</p>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

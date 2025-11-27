@@ -9,7 +9,7 @@ from biztrack.forms import (
     CustomerAddForm, CustomerDeleteForm, CustomerUpdateForm,
     ProductAddForm, ProductDeleteForm, ProductUpdateForm,
     InvoiceAddForm, InvoiceDeleteForm, InvoiceUpdateForm,
-    PayrollAddForm, PayrollDeleteForm
+    PayrollAddForm, PayrollDeleteForm, PayrollUpdateForm
 )
 from .biztrack_db import (
     get_top_sellers, execute_query, create_invoice_and_insert_sales,
@@ -226,13 +226,14 @@ def customers():
 def payrolls():
     add_form = PayrollAddForm()
     delete_form = PayrollDeleteForm()
+    update_form = PayrollUpdateForm()  # <-- ADD THIS
 
     if request.method == "POST":
         action = request.form.get("action")
         
+        # Handle Add
         if action == "add" and add_form.validate_on_submit():
             try:
-                # Convert date to string format
                 date_str = add_form.date.data.strftime("%Y-%m-%d") if add_form.date.data else datetime.now().strftime("%Y-%m-%d")
                 add_payroll(
                     add_form.employee_name.data,
@@ -244,6 +245,22 @@ def payrolls():
                 flash(f"Error: {str(e)}", "danger")
             return redirect(url_for("main.payrolls"))
 
+        # Handle Update
+        elif action == "update" and update_form.validate_on_submit():
+            try:
+                date_str = update_form.date.data.strftime("%Y-%m-%d") if update_form.date.data else datetime.now().strftime("%Y-%m-%d")
+                # Update in database
+                execute_query(
+                    "UPDATE payrolls SET employee_name=?, salary=?, date=? WHERE id=?;",
+                    (update_form.employee_name.data, update_form.salary.data, date_str, update_form.id.data),
+                    commit=True
+                )
+                flash("Payroll record updated successfully", "success")
+            except Exception as e:
+                flash(f"Error: {str(e)}", "danger")
+            return redirect(url_for("main.payrolls"))
+
+        # Handle Delete
         elif action == "delete" and delete_form.validate_on_submit():
             try:
                 delete_payroll(int(delete_form.id.data))
@@ -253,8 +270,8 @@ def payrolls():
             return redirect(url_for("main.payrolls"))
 
     payrolls = get_payrolls()
-    return render_template("payrolls.html", payrolls=payrolls, add_form=add_form, delete_form=delete_form)
-
+    return render_template("payrolls.html", payrolls=payrolls, 
+                           add_form=add_form, delete_form=delete_form, update_form=update_form)
 # -----------------------
 # Invoices
 # -----------------------
@@ -282,9 +299,23 @@ def invoices():
                 if invoice_id:
                     flash(f"Invoice #{invoice_id} created successfully", "success")
                 else:
-                    flash("Failed to create invoice", "danger")
+                    flash("Failed to create invoice. Check stock levels.", "danger")
             except Exception as e:
                 flash(f"Error creating invoice: {e}", "danger")
+            return redirect(url_for("main.invoices"))
+
+        # Handle Update
+        elif action == "update" and update_form.validate_on_submit():
+            try:
+                execute_query(
+                    "UPDATE invoices SET customer_id=?, total=?, date=? WHERE id=?;",
+                    (update_form.customer_id.data, update_form.total.data,
+                     update_form.date.data, update_form.id.data),
+                    commit=True
+                )
+                flash("Invoice updated successfully", "success")
+            except Exception as e:
+                flash(f"Error updating invoice: {e}", "danger")
             return redirect(url_for("main.invoices"))
 
         # Handle Delete
