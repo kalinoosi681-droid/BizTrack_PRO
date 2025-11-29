@@ -1,0 +1,142 @@
+
+<!-- ========================================
+     CUSTOMER DETAIL PAGE
+     ======================================== -->
+{% extends "base.html" %}
+{% block title %}{{ customer.name }} - Customer Details{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <a href="{{ url_for('main.customers') }}" class="btn btn-outline-secondary">
+    <i class="fas fa-arrow-left me-2"></i>Back to Customers
+  </a>
+</div>
+<h1 class="page-title">
+  <i class="fas fa-user-tag me-2"></i>{{ customer.name }}
+  
+  {# Customer Status Badge #}
+  {% if customer.total_spend > 500 %}
+    <span class="badge bg-warning text-dark ms-3 fs-5" title="High Value Customer"><i class="fas fa-star"></i> VIP</span>
+  {% elif customer.days_since_purchase and customer.days_since_purchase > 90 %}
+    <span class="badge bg-danger ms-3 fs-5" title="Inactive for over 90 days"><i class="fas fa-exclamation-triangle"></i> At Risk</span>
+  {% elif not customer.last_purchase %}
+    <span class="badge bg-info ms-3 fs-5" title="New Customer"><i class="fas fa-user-plus"></i> New</span>
+  {% else %}
+    <span class="badge bg-success ms-3 fs-5" title="Active Customer"><i class="fas fa-check-circle"></i> Active</span>
+  {% endif %}
+</h1>
+
+<div class="row g-4 mb-4">
+  <!-- Customer Info -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-primary text-white fw-bold">
+        <i class="fas fa-address-card me-2"></i>Customer Information
+      </div>
+      <div class="card-body">
+        <table class="table table-borderless">
+          <tr>
+            <td class="fw-bold"><i class="fas fa-hashtag me-2 text-muted"></i>ID:</td>
+            <td><span class="badge bg-secondary fs-6">{{ customer.id }}</span></td>
+          </tr>
+          <tr>
+            <td class="fw-bold"><i class="fas fa-phone me-2 text-muted"></i>Phone:</td>
+            <td><a href="tel:{{ customer.phone }}" class="text-decoration-none">{{ customer.phone }}</a></td>
+          </tr>
+          <tr>
+            <td class="fw-bold"><i class="fas fa-envelope me-2 text-muted"></i>Email:</td>
+            <td><a href="mailto:{{ customer.email }}" class="text-decoration-none">{{ customer.email }}</a></td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer Insights -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-success text-white fw-bold">
+        <i class="fas fa-chart-pie me-2"></i>Customer Insights
+      </div>
+      <div class="card-body d-flex flex-column justify-content-around">
+        <div class="row">
+          <div class="col-6 text-center border-end">
+            <h4 class="fw-bold text-success mb-1">${{ "%.2f"|format(customer.total_spend|float) }}</h4>
+            <small class="text-muted text-uppercase">Total Spend</small>
+          </div>
+          <div class="col-6 text-center">
+            <h4 class="fw-bold mb-1">${{ "%.2f"|format(customer.avg_spend|float) }}</h4>
+            <small class="text-muted text-uppercase">Avg. Spend</small>
+          </div>
+        </div>
+        <hr>
+        <div class="row">
+          <div class="col-6 text-center border-end">
+            <h4 class="fw-bold mb-1">{{ purchases|length }}</h4>
+            <small class="text-muted text-uppercase">Total Invoices</small>
+          </div>
+          <div class="col-6 text-center">
+            {% if customer.days_since_purchase is not none %}
+              <h4 class="fw-bold mb-1">{{ customer.days_since_purchase }}</h4>
+              <small class="text-muted text-uppercase">Days Since Last Purchase</small>
+            {% else %}
+              <h4 class="fw-bold mb-1">N/A</h4>
+              <small class="text-muted text-uppercase">No Purchase History</small>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Purchase History -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-info text-white fw-bold">
+    <i class="fas fa-receipt me-2"></i>Purchase History (Last 10 Orders)
+  </div>
+  <div class="card-body">
+    {% if purchases %}
+    <!-- ADVANCED UPGRADE: Interactive Purchase History Chart -->
+    <div style="height: 300px;">
+      <canvas id="purchaseHistoryChart"></canvas>
+    </div>
+    {% else %}
+    <p class="text-muted text-center py-4">No purchase history available</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const purchaseHistory = {{ purchases|tojson }};
+    if (purchaseHistory && purchaseHistory.length > 0) {
+        const ctx = document.getElementById('purchaseHistoryChart').getContext('2d');
+        const labels = purchaseHistory.map(p => p.date.split(' ')[0]).reverse();
+        const data = purchaseHistory.map(p => p.total).reverse();
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Invoice Total ($)',
+                    data: data,
+                    borderColor: 'rgba(25, 135, 84, 1)',
+                    backgroundColor: 'rgba(25, 135, 84, 0.2)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, title: { display: true, text: 'Invoice Total ($)' } } }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

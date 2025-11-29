@@ -2,13 +2,12 @@
 import argparse
 import sys
 import logging
+from biztrack.webapp import create_flask_app
 from biztrack.biztrack_db import (
     execute_query,
     insert_invoice_and_sales,
     remove_duplicates,
     backup_db,
-    seed_default_data,
-    init_db
 )
 
 # Configure logger
@@ -77,6 +76,16 @@ def run_backup(args):
         logger.info(f"Backup created: {path}")
     else:
         logger.error("Backup failed")
+        
+def run_compute_daily_store(args):
+    # This functionality is now part of the app's startup logic
+    # and can be triggered via a dedicated CLI command if needed.
+    logger.info("Daily metrics computation can be triggered via a Flask CLI command or a scheduled job.")
+    
+def run_patch_schema(args):
+    from biztrack.biztrack_db import migrate_schema
+    migrate_schema()
+    logger.info("Schema patched successfully")
 
 def main(argv=None):
     if argv is None:
@@ -84,6 +93,13 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(prog="biztrack", description="BizTrack PRO CLI")
     sub = parser.add_subparsers(title="commands", dest="command")
+    
+    
+    metrics_store = sub.add_parser("compute-daily-store", help="[DEPRECATED] Compute today's store metrics")
+    metrics_store.set_defaults(func=run_compute_daily_store)
+    
+    patch_parser = sub.add_parser("patch-schema", help="Patch missing columns in DB")
+    patch_parser.set_defaults(func=run_patch_schema)
 
     # Web
     web_parser = sub.add_parser("web", help="Run the web server")
@@ -119,17 +135,19 @@ def main(argv=None):
     backup_parser = sub.add_parser("backup", help="Create a database backup")
     backup_parser.set_defaults(func=run_backup)
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
         sys.exit(1)
 
-    # Ensure DB initialized and seed default products
-    init_db()
-    seed_default_data()
-
-    # Call the selected function
-    args.func(args)
+    # The 'web' command handles its own app creation.
+    if args.command == 'web':
+        args.func(args)
+    else:
+        # All other commands need an application context to interact with the database.
+        app = create_flask_app()
+        with app.app_context():
+            args.func(args)
 
 if __name__ == "__main__":
     main()

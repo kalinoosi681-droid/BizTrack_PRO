@@ -1,0 +1,174 @@
+<!-- ========================================
+     PRODUCT DETAIL PAGE
+     ======================================== -->
+{% extends "base.html" %}
+{% block content %}
+<div class="mb-4">
+  <a href="{{ url_for('main.products') }}" class="btn btn-outline-secondary">
+    <i class="fas fa-arrow-left me-2"></i>Back to Products
+  </a>
+</div>
+
+<h1 class="page-title">
+  <i class="fas fa-box me-2"></i>{{ product.name }}
+</h1>
+
+<div class="row g-4 mb-4">
+  <!-- Product Info Card -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-primary text-white fw-bold">
+        <i class="fas fa-info-circle me-2"></i>Product Information
+      </div>
+      <div class="card-body">
+        <table class="table table-borderless">
+          <tr>
+            <td class="fw-bold"><i class="fas fa-hashtag me-2 text-muted"></i>ID:</td>
+            <td><span class="badge bg-secondary fs-6">{{ product.id }}</span></td>
+          </tr>
+          <tr>
+            <td class="fw-bold"><i class="fas fa-list me-2 text-muted"></i>Category:</td>
+            <td><span class="badge bg-info">{{ product.category }}</span></td>
+          </tr>
+          <tr>
+            <td class="fw-bold"><i class="fas fa-cubes me-2 text-muted"></i>Stock Quantity:</td>
+            <td>
+              {% if product.qty < 10 %}
+              <span class="badge bg-danger fs-5">{{ product.qty }}</span>
+              {% elif product.qty < 50 %}
+              <span class="badge bg-warning text-dark fs-5">{{ product.qty }}</span>
+              {% else %}
+              <span class="badge bg-success fs-5">{{ product.qty }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td class="fw-bold"><i class="fas fa-dollar-sign me-2 text-muted"></i>Price:</td>
+            <td class="text-success fw-bold fs-5">${{ "%.2f"|format(product.price) }}</td>
+          </tr>
+          <tr>
+            <td class="fw-bold"><i class="fas fa-chart-line me-2 text-muted"></i>Performance:</td>
+            <td>
+              <div class="progress" style="height: 25px;">
+                {% if product.perf_percent >= 120 %}
+                <div class="progress-bar bg-success" style="width: 100%">
+                  {{ "%.0f"|format(product.perf_percent) }}% <i class="fas fa-fire ms-1"></i>
+                </div>
+                {% elif product.perf_percent < 80 %}
+                <div class="progress-bar bg-danger" style="width: {{ product.perf_percent }}%">
+                  {{ "%.0f"|format(product.perf_percent) }}%
+                </div>
+                {% else %}
+                <div class="progress-bar bg-warning" style="width: {{ product.perf_percent }}%">
+                  {{ "%.0f"|format(product.perf_percent) }}%
+                </div>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="fw-bold"><i class="fas fa-exclamation-triangle me-2 text-muted"></i>Low Stock Alert at:</td>
+            <td>
+              <!-- CRITICAL FIX: Add the missing threshold update form -->
+              <form action="{{ url_for('main.update_product_threshold_route', pid=product.id) }}" method="POST" class="d-flex align-items-center">
+                {{ threshold_form.hidden_tag() }}
+                {{ threshold_form.id(value=product.id, class="d-none") }}
+                <div class="input-group input-group-sm" style="max-width: 150px;">
+                  {{ threshold_form.low_stock_threshold(class="form-control", value=product.low_stock_threshold) }}
+                  {{ threshold_form.submit(class="btn btn-outline-warning") }}
+                </div>
+              </form>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Performance Status -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-success text-white fw-bold">
+        <i class="fas fa-chart-bar me-2"></i>Performance Status
+      </div>
+      <div class="card-body text-center">
+        {% if product.perf_percent >= 120 %}
+        <div class="mb-3">
+          <i class="fas fa-fire fa-4x text-danger badge-pulse"></i>
+        </div>
+        <h4 class="text-success mb-2">Fast Moving Product!</h4>
+        <p class="text-muted">This product is performing {{ "%.0f"|format(product.perf_percent) }}% above average</p>
+        {% elif product.perf_percent < 80 %}
+        <div class="mb-3">
+          <i class="fas fa-turtle fa-4x text-warning"></i>
+        </div>
+        <h4 class="text-warning mb-2">Slow Moving Product</h4>
+        <p class="text-muted">Consider promotions or discounts to increase sales</p>
+        {% else %}
+        <div class="mb-3">
+          <i class="fas fa-check-circle fa-4x text-primary"></i>
+        </div>
+        <h4 class="text-primary mb-2">Normal Performance</h4>
+        <p class="text-muted">Product is selling at expected rate</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sales History -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-info text-white fw-bold d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-history me-2"></i>Sales History (Last 30 Days)</span>
+    <button class="btn btn-sm btn-light" onclick="generatePDF()"><i class="fas fa-file-pdf me-2"></i>Export PDF</button>
+  </div>
+  <div class="card-body" id="sales-history-report">
+    {% if sale_history %}
+    <!-- ADVANCED UPGRADE: Interactive Sales Chart -->
+    <div style="height: 300px;">
+      <canvas id="salesHistoryChart"></canvas>
+    </div>
+    {% else %}
+    <p class="text-muted text-center py-4">No sales recorded in the last 30 days</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const saleHistory = {{ sale_history|tojson }};
+    if (saleHistory && saleHistory.length > 0) {
+        const ctx = document.getElementById('salesHistoryChart').getContext('2d');
+        const labels = saleHistory.map(s => s.date.split(' ')[0]).reverse();
+        const data = saleHistory.map(s => s.qty).reverse();
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Quantity Sold',
+                    data: data,
+                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
+                    borderColor: 'rgba(25, 135, 84, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, title: { display: true, text: 'Units Sold' } } }
+            }
+        });
+    }
+});
+
+function generatePDF() {
+    const element = document.getElementById('sales-history-report');
+    html2pdf(element, { filename: 'product_{{ product.id }}_sales_report.pdf' });
+}
+</script>
+{% endblock %}

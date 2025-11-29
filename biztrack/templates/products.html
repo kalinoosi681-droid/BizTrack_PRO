@@ -1,118 +1,291 @@
-
-{% extends "layout.html" %}
+{% extends "base.html" %}
+{% block title %}Product Management{% endblock %}
 {% block content %}
-<h2 class="mb-4">Products</h2>
 
-<div class="row">
-  <!-- Add Product Form -->
-  <div class="col-md-4">
-    <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold">Add Product</div>
+<h1 class="page-title">
+  <i class="fas fa-robot me-2"></i>AI-Powered Product Management
+</h1>
+
+<!-- Search Bar - FIXED Z-INDEX -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card shadow-sm">
       <div class="card-body">
-        <form method="POST">
+        <div class="input-group input-group-lg">
+          <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search"></i></span>
+          <input id="product_search" type="text" class="form-control border-start-0"
+                 placeholder="Search by ID, name, or category to populate the update form..." 
+                 autocomplete="off">
+          <div id="product_suggest" class="dropdown-menu w-100" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD PRODUCT with AI -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm h-100 border-primary">
+      <div class="card-header bg-primary text-white fw-bold">
+        <i class="fas fa-robot me-2"></i>Add Product (AI-Powered)
+      </div>
+      <div class="card-body">
+        <form method="POST" id="product_add_form">
           {{ add_form.hidden_tag() }}
           <input type="hidden" name="action" value="add">
+          
           <div class="mb-3">
-            {{ add_form.name.label(class="form-label") }}
-            {{ add_form.name(class="form-control") }}
+            <label class="form-label"><i class="fas fa-tag me-1"></i>Product Name</label>
+            {{ add_form.name(class="form-control", id="add_product_name", placeholder="e.g., Premium Coffee Beans", **{'autocomplete': 'off'}) }}
+            <small class="text-muted">Type product name for AI suggestions</small>
           </div>
+          
+          <!-- AI Suggestions Container -->
+          <div id="ai_product_suggestions" class="mb-3" style="display: none;"></div>
+          
           <div class="mb-3">
-            {{ add_form.category.label(class="form-label") }}
-            {{ add_form.category(class="form-control") }}
+            <label class="form-label"><i class="fas fa-list me-1"></i>Category</label>
+            {{ add_form.category(class="form-control", id="add_product_category", placeholder="AI will suggest...", **{'autocomplete': 'off'}) }}
           </div>
-          <div class="mb-3">
-            {{ add_form.qty.label(class="form-label") }}
-            {{ add_form.qty(class="form-control") }}
+          
+          <div class="row">
+            <div class="col-6 mb-3">
+              <label class="form-label"><i class="fas fa-cubes me-1"></i>Quantity</label>
+              {{ add_form.qty(class="form-control", id="add_product_qty", placeholder="AI suggests...", min="0", **{'autocomplete': 'off'}) }}
+              <small id="qtyHint" class="text-info d-none"></small>
+            </div>
+            <div class="col-6 mb-3">
+              <label class="form-label"><i class="fas fa-dollar-sign me-1"></i>Price</label>
+              {{ add_form.price(class="form-control", id="add_product_price", step="0.01", placeholder="AI suggests...", **{'autocomplete': 'off'}) }}
+            </div>
           </div>
-          <div class="mb-3">
-            {{ add_form.price.label(class="form-label") }}
-            {{ add_form.price(class="form-control", step="0.01") }}
-          </div>
-          {{ add_form.submit(class="btn btn-primary") }}
+          
+          {{ add_form.submit(class="btn btn-primary w-100") }}
         </form>
       </div>
     </div>
   </div>
 
-  <!-- Update Product Form -->
-  <div class="col-md-4">
-    <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold">Update Product</div>
+  <!-- UPDATE PRODUCT -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-warning text-dark fw-bold">
+        <i class="fas fa-edit me-2"></i>Update Product
+      </div>
       <div class="card-body">
         <form method="POST">
           {{ update_form.hidden_tag() }}
           <input type="hidden" name="action" value="update">
+          
           <div class="mb-3">
-            {{ update_form.id.label(class="form-label") }}
-            {{ update_form.id(class="form-control") }}
+            <label class="form-label">Product ID</label>
+            {{ update_form.id(class="form-control", id="update_product_id", placeholder="ID") }}
           </div>
+          
           <div class="mb-3">
-            {{ update_form.name.label(class="form-label") }}
-            {{ update_form.name(class="form-control") }}
+            <label class="form-label">Name</label>
+            {{ update_form.name(class="form-control", id="update_product_name", placeholder="Name") }}
           </div>
+          
           <div class="mb-3">
-            {{ update_form.category.label(class="form-label") }}
-            {{ update_form.category(class="form-control") }}
+            <label class="form-label">Category</label>
+            {{ update_form.category(class="form-control", id="update_product_category", placeholder="Category") }}
           </div>
-          <div class="mb-3">
-            {{ update_form.qty.label(class="form-label") }}
-            {{ update_form.qty(class="form-control") }}
+          
+          <div class="row">
+            <div class="col-6 mb-3">
+              <label class="form-label">Quantity</label>
+              {{ update_form.qty(class="form-control", id="update_product_qty", placeholder="Qty") }}
+            </div>
+            <div class="col-6 mb-3">
+              <label class="form-label">Price</label>
+              {{ update_form.price(class="form-control", id="update_product_price", step="0.01", placeholder="Price") }}
+            </div>
           </div>
-          <div class="mb-3">
-            {{ update_form.price.label(class="form-label") }}
-            {{ update_form.price(class="form-control", step="0.01") }}
-          </div>
-          {{ update_form.submit(class="btn btn-warning") }}
+          
+          {{ update_form.submit(class="btn btn-warning w-100 text-dark") }}
         </form>
       </div>
     </div>
   </div>
 
-  <!-- Delete Product Form -->
-  <div class="col-md-6">
-    <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold">Delete Product</div>
+  <!-- DELETE PRODUCT -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-danger text-white fw-bold">
+        <i class="fas fa-trash me-2"></i>Delete Product
+      </div>
       <div class="card-body">
-        <form method="POST">
+        <div class="alert alert-warning border-0">
+          <i class="fas fa-exclamation-triangle me-2"></i>
+          <strong>Warning:</strong> Cannot be undone!
+        </div>
+        
+        <form method="POST" onsubmit="return confirm('Delete this product?');">
           {{ delete_form.hidden_tag() }}
           <input type="hidden" name="action" value="delete">
+          
           <div class="mb-3">
-            {{ delete_form.id.label }} 
-            {{ delete_form.id(class="form-control") }}
+            <label class="form-label">Product ID</label>
+            {{ delete_form.id(class="form-control", placeholder="ID to delete") }}
           </div>
-          {{ delete_form.submit(class="btn btn-danger") }}
+          
+          {{ delete_form.submit(class="btn btn-danger w-100") }}
         </form>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Product Table -->
-<div class="card shadow-sm">
-  <div class="card-header fw-bold">Product List</div>
-  <div class="card-body">
-    <table class="table table-striped table-hover align-middle">
-      <thead class="table-light">
-        <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Category</th>
-          <th>Quantity</th>
-          <th>Price</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in products %}
-        <tr>
-          <td>{{ p.id }}</td>
-          <td>{{ p.name }}</td>
-          <td>{{ p.category }}</td>
-          <td>{{ p.qty }}</td>
-          <td>${{ "%.2f"|format(p.price) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<!-- Product Table with Bulk Actions -->
+<form action="{{ url_for('main.bulk_update_products') }}" method="POST">
+  {{ bulk_update_form.hidden_tag() }}
+  <div class="card shadow-sm">
+    <div class="card-header fw-bold bg-light d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-table me-2"></i>Product Inventory ({{ products|length }} items)</span>
+      <button type="button" class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+        <i class="fas fa-sync-alt me-1"></i>Refresh
+      </button>
+    </div>
+    <div class="card-body">
+      <!-- Bulk Actions Panel -->
+      <div class="card bg-light mb-3" id="bulk-actions-panel" style="display: none;">
+        <div class="card-body">
+          <div class="row align-items-end g-3">
+            <div class="col-md-3">
+              <label for="bulk_action" class="form-label">Bulk Action</label>
+              {{ bulk_update_form.bulk_action(class="form-select", id="bulk_action_select") }}
+            </div>
+            <div class="col-md-4" id="category-input-group" style="display: none;">
+              <label for="new_category" class="form-label">New Category</label>
+              {{ bulk_update_form.new_category(class="form-control", placeholder="e.g., Beverages") }}
+            </div>
+            <div class="col-md-4" id="price-input-group" style="display: none;">
+              <label for="price_percentage" class="form-label">Adjust Price By (%)</label>
+              {{ bulk_update_form.price_percentage(class="form-control", placeholder="e.g., 10 or -5") }}
+            </div>
+            <div class="col-md-auto">
+              {{ bulk_update_form.submit(class="btn btn-info") }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% if products %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th><input type="checkbox" id="select-all-products" title="Select All"></th>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Quantity</th>
+              <th>Price</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in products %}
+            <tr>
+              <td><input type="checkbox" name="product_ids" value="{{ p.id }}" class="product-checkbox"></td>
+              <td><span class="badge bg-secondary">{{ p.id }}</span></td>
+              <td class="fw-semibold"><a href="{{ url_for('main.product_detail', pid=p.id) }}" class="text-decoration-none">{{ p.name }}</a></td>
+              <td><span class="badge bg-info">{{ p.category or 'Uncategorized' }}</span></td>
+              <td>
+                {% set threshold = p.low_stock_threshold or 10 %}
+                {% if p.qty <= 0 %}<span class="badge bg-dark fs-6" title="Out of Stock">0</span>
+                {% elif p.qty <= threshold %}<span class="badge bg-danger fs-6">{{ p.qty }}</span>
+                {% elif p.qty <= threshold * 2 %}<span class="badge bg-warning text-dark fs-6">{{ p.qty }}</span>
+                {% else %}<span class="badge bg-success fs-6">{{ p.qty }}</span>
+                {% endif %}
+              </td>
+              <td class="text-success fw-bold">${{ "%.2f"|format(p.price) }}</td>
+              <td>
+                {% if p.perf_flag == "🔥 Fast" %}<span class="badge bg-success">{{ p.perf_flag }}</span>
+                {% elif p.perf_flag == "🐢 Slow" %}<span class="badge bg-danger">{{ p.perf_flag }}</span>
+                {% else %}<span class="badge bg-warning text-dark">{{ p.perf_flag }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <button type="button" class="btn btn-sm btn-outline-info edit-product-btn" data-id="{{ p.id }}" data-name="{{ p.name }}" data-category="{{ p.category or '' }}" data-qty="{{ p.qty }}" data-price="{{ p.price }}" title="Edit Product">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <a href="{{ url_for('main.product_detail', pid=p.id) }}" class="btn btn-sm btn-outline-primary" title="View Details">
+                  <i class="fas fa-eye"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-5">
+        <i class="fas fa-box-open fa-4x text-muted mb-3"></i>
+        <p class="text-muted">No products found. Add your first product above!</p>
+      </div>
+      {% endif %}
+    </div>
   </div>
-</div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Edit Button Handler ---
+    document.querySelectorAll('.edit-product-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            document.getElementById('update_product_id').value = this.dataset.id;
+            document.getElementById('update_product_name').value = this.dataset.name;
+            document.getElementById('update_product_category').value = this.dataset.category;
+            document.getElementById('update_product_qty').value = this.dataset.qty;
+            document.getElementById('update_product_price').value = this.dataset.price;
+            
+            // Scroll to the top to make the form visible
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    });
+
+    // --- Bulk Actions UI Handler ---
+    const selectAllCheckbox = document.getElementById('select-all-products');
+    const productCheckboxes = document.querySelectorAll('.product-checkbox');
+    const bulkActionsPanel = document.getElementById('bulk-actions-panel');
+    const bulkActionSelect = document.getElementById('bulk_action_select');
+    const categoryInputGroup = document.getElementById('category-input-group');
+    const priceInputGroup = document.getElementById('price-input-group');
+
+    function toggleBulkPanel() {
+        const anyChecked = Array.from(productCheckboxes).some(cb => cb.checked);
+        bulkActionsPanel.style.display = anyChecked ? 'block' : 'none';
+    }
+
+    function toggleActionInputs() {
+        const selectedAction = bulkActionSelect.value;
+        categoryInputGroup.style.display = selectedAction === 'set_category' ? 'block' : 'none';
+        priceInputGroup.style.display = selectedAction === 'adjust_price' ? 'block' : 'none';
+    }
+
+    selectAllCheckbox.addEventListener('change', function () {
+        productCheckboxes.forEach(checkbox => {
+            checkbox.checked = selectAllCheckbox.checked;
+        });
+        toggleBulkPanel();
+    });
+
+    productCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', toggleBulkPanel);
+    });
+
+    bulkActionSelect.addEventListener('change', toggleActionInputs);
+
+    // Initial state on page load
+    toggleBulkPanel();
+    toggleActionInputs();
+});
+</script>
 {% endblock %}

@@ -1,13 +1,34 @@
 
-{% extends "layout.html" %}
+{% extends "base.html" %}
+{% block title %}Customer Management{% endblock %}
 {% block content %}
-<h2 class="mb-4">Customers</h2>
+<h1 class="page-title">
+  <i class="fas fa-users me-2"></i>Customer Management
+</h1>
+
+<!-- Search Bar -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <!-- UI/UX Refinement: Improved search bar appearance -->
+        <div class="input-group input-group-lg position-relative">
+          <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search"></i></span>
+          <input id="customer_search" type="text" class="form-control border-start-0"
+                 placeholder="Search to populate the update & delete forms..." 
+                 autocomplete="off">
+          <div id="customer_suggest" class="dropdown-menu w-100" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="row">
   <!-- Add Customer Form -->
   <div class="col-md-4">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold bg-primary text-white">Add Customer</div>
+      <div class="card-header fw-bold bg-primary text-white"><i class="fas fa-user-plus me-2"></i>Add New Customer</div>
       <div class="card-body">
         <form method="POST">
           {{ add_form.hidden_tag() }}
@@ -33,26 +54,26 @@
   <!-- Update Customer Form -->
   <div class="col-md-4">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold bg-warning text-dark">Update Customer</div>
+      <div class="card-header fw-bold bg-warning text-dark"><i class="fas fa-edit me-2"></i>Update Customer</div>
       <div class="card-body">
         <form method="POST">
           {{ update_form.hidden_tag() }}
           <input type="hidden" name="action" value="update">
           <div class="mb-3">
             {{ update_form.id.label(class="form-label") }}
-            {{ update_form.id(class="form-control", placeholder="Customer ID") }}
+            {{ update_form.id(class="form-control", id="update_customer_id", placeholder="Customer ID") }}
           </div>
           <div class="mb-3">
             {{ update_form.name.label(class="form-label") }}
-            {{ update_form.name(class="form-control", placeholder="New name") }}
+            {{ update_form.name(class="form-control", id="update_customer_name", placeholder="New name") }}
           </div>
           <div class="mb-3">
             {{ update_form.phone.label(class="form-label") }}
-            {{ update_form.phone(class="form-control", placeholder="New phone") }}
+            {{ update_form.phone(class="form-control", id="update_customer_phone", placeholder="New phone") }}
           </div>
           <div class="mb-3">
             {{ update_form.email.label(class="form-label") }}
-            {{ update_form.email(class="form-control", placeholder="New email") }}
+            {{ update_form.email(class="form-control", id="update_customer_email", placeholder="New email") }}
           </div>
           {{ update_form.submit(class="btn btn-warning w-100") }}
         </form>
@@ -63,14 +84,14 @@
   <!-- Delete Customer Form -->
   <div class="col-md-4">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold bg-danger text-white">Delete Customer</div>
+      <div class="card-header fw-bold bg-danger text-white"><i class="fas fa-trash me-2"></i>Delete Customer</div>
       <div class="card-body">
         <form method="POST" onsubmit="return confirm('Are you sure you want to delete this customer?');">
           {{ delete_form.hidden_tag() }}
           <input type="hidden" name="action" value="delete">
           <div class="mb-3">
             {{ delete_form.id.label(class="form-label") }}
-            {{ delete_form.id(class="form-control", placeholder="Customer ID") }}
+            {{ delete_form.id(class="form-control", id="delete_customer_id", placeholder="ID from search or table") }}
           </div>
           {{ delete_form.submit(class="btn btn-danger w-100") }}
         </form>
@@ -79,28 +100,58 @@
   </div>
 </div>
 
-<!-- Customer Table - THIS WAS THE BUG -->
+<!-- Intelligent Customer Table -->
 <div class="card shadow-sm">
-  <div class="card-header fw-bold">Customer List ({{ customers|length }} total)</div>
+  <div class="card-header fw-bold bg-light d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-table me-2"></i>Customer List ({{ customers|length }} total)</span>
+    <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+      <i class="fas fa-sync-alt me-1"></i>Refresh
+    </button>
+  </div>
   <div class="card-body">
     {% if customers %}
     <div class="table-responsive">
-      <table class="table table-striped table-hover align-middle">
+      <table class="table table-hover align-middle">
         <thead class="table-light">
           <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Phone</th>
-            <th>Email</th>
+            <th><i class="fas fa-hashtag me-1"></i>ID</th>
+            <th><i class="fas fa-user me-1"></i>Name</th>
+            <th><i class="fas fa-phone me-1"></i>Phone</th>
+            <th><i class="fas fa-envelope me-1"></i>Email</th>
+            <th><i class="fas fa-dollar-sign me-1"></i>Total Spend</th>
+            <th><i class="fas fa-history me-1"></i>Last Purchase</th>
+            <th><i class="fas fa-cogs me-1"></i>Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for c in customers %}
           <tr>
             <td><span class="badge bg-secondary">{{ c.id }}</span></td>
-            <td>{{ c.name }}</td>
+            <td class="fw-semibold">
+              <a href="{{ url_for('main.customer_detail', cid=c.id) }}" class="text-decoration-none">{{ c.name }}</a>
+              {% if c.total_spend > 500 %}
+                <span class="badge bg-warning text-dark ms-2" title="High Value Customer"><i class="fas fa-star"></i> VIP</span>
+              {% endif %}
+            </td>
             <td>{{ c.phone or 'N/A' }}</td>
             <td>{{ c.email or 'N/A' }}</td>
+            <td class="text-success fw-bold">${{ "%.2f"|format(c.total_spend|float) }}</td>
+            <td>
+              {% if c.last_purchase %}
+                {{ c.last_purchase.split(' ')[0] }}
+                <small class="text-muted d-block" data-last-purchase="{{ c.last_purchase }}"></small>
+              {% else %}
+                N/A
+              {% endif %}
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-info edit-customer-btn" data-id="{{ c.id }}" data-name="{{ c.name }}" data-phone="{{ c.phone }}" data-email="{{ c.email }}" title="Edit Customer">
+                <i class="fas fa-edit"></i>
+              </button>
+              <a href="{{ url_for('main.customer_detail', cid=c.id) }}" class="btn btn-sm btn-outline-primary" title="View Details">
+                <i class="fas fa-eye"></i>
+              </a>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -111,4 +162,46 @@
     {% endif %}
   </div>
 </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- ADVANCED UPGRADE: Unified form population function ---
+    function populateForms(customerData) {
+        // Populate Update Form
+        document.getElementById('update_customer_id').value = customerData.id || '';
+        document.getElementById('update_customer_name').value = customerData.name || '';
+        document.getElementById('update_customer_phone').value = customerData.phone || '';
+        document.getElementById('update_customer_email').value = customerData.email || '';
+
+        // Populate Delete Form
+        document.getElementById('delete_customer_id').value = customerData.id || '';
+
+        // Scroll to top to make the forms visible
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // --- Event Listener for Edit Buttons in the table ---
+    document.querySelectorAll('.edit-customer-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const customerData = {
+                id: this.dataset.id,
+                name: this.dataset.name,
+                phone: this.dataset.phone,
+                email: this.dataset.email
+            };
+            populateForms(customerData);
+        });
+    });
+
+    // --- CRITICAL FIX: Calculate and display "days ago" dynamically ---
+    document.querySelectorAll('[data-last-purchase]').forEach(el => {
+        const lastPurchaseDate = new Date(el.dataset.lastPurchase);
+        const daysAgo = Math.round((new Date() - lastPurchaseDate) / (1000 * 60 * 60 * 24));
+        el.textContent = `${daysAgo} days ago`;
+    });
+});
+</script>
 {% endblock %}

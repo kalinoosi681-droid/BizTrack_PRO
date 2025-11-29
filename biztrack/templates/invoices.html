@@ -1,101 +1,117 @@
-
-{% extends "layout.html" %}
+{% extends "base.html" %}
 {% block content %}
-<h2 class="mb-4">Invoice Management</h2>
+<h1 class="page-title">
+  <i class="fas fa-file-invoice me-2"></i>Invoice Management
+</h1>
 
-<div class="row">
-  <!-- Create Invoice Form -->
+<!-- Create Invoice Form - ENHANCED MULTI-ITEM -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-primary text-white fw-bold">
+    <i class="fas fa-plus-circle me-2"></i>Create New Invoice
+  </div>
+  <div class="card-body">
+    <form method="POST" id="invoiceForm">
+      {{ add_form.hidden_tag() }}
+      <input type="hidden" name="action" value="add">
+      
+      <!-- Customer Selection - FIXED Z-INDEX -->
+      <div class="row mb-4">
+        <div class="col-md-6">
+          <label class="form-label"><i class="fas fa-user me-1"></i>Search Customer</label>
+          <div class="position-relative">
+            <input id="inv_customer_search" type="text" class="form-control" 
+                   placeholder="Type customer name or ID..." autocomplete="off" required>
+            <div id="inv_customer_suggest" class="dropdown-menu w-100" style="max-height: 300px; overflow-y: auto; z-index: 1051;"></div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label"><i class="fas fa-hashtag me-1"></i>Customer ID</label>
+          <input type="number" name="customer_id" id="inv_customer_id" class="form-control" placeholder="Will auto-fill" readonly required>
+        </div>
+      </div>
+
+      <!-- Dynamic Line Items -->
+      <div class="mb-3">
+        <h5 class="fw-bold mb-3">
+          <i class="fas fa-list me-2"></i>Invoice Items
+          <button type="button" class="btn btn-sm btn-success" id="addItemBtn">
+            <i class="fas fa-plus me-1"></i>Add Item
+          </button>
+        </h5>
+        
+        <div id="itemsContainer">
+          <!-- Initial item row -->
+          <div class="row mb-3 pb-3 border-bottom item-row" data-item-index="0">
+            <div class="col-md-5">
+              <label class="form-label"><i class="fas fa-box me-1"></i>Product</label>
+              <div class="position-relative">
+                <input type="text" class="form-control product_search" 
+                       placeholder="Search product..." autocomplete="off" required>
+                <div class="dropdown-menu w-100 product_suggest" style="max-height: 250px; overflow-y: auto; z-index: 1051;"></div>
+              </div>
+              <input type="number" name="items-0-pid" class="form-control mt-2" placeholder="Product ID" readonly required>
+            </div>
+            
+            <div class="col-md-3">
+              <label class="form-label"><i class="fas fa-shopping-cart me-1"></i>Quantity</label>
+              <input type="number" name="items-0-qty" class="form-control qty-input" placeholder="Qty" min="1" required>
+            </div>
+            
+            <div class="col-md-3">
+              <label class="form-label"><i class="fas fa-dollar-sign me-1"></i>Price</label>
+              <input type="number" name="items-0-price" class="form-control price-input" step="0.01" placeholder="0.00" readonly required>
+            </div>
+            
+            <div class="col-md-1 d-flex align-items-end">
+              <button type="button" class="btn btn-danger btn-sm remove-item" title="Remove item">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Total Preview -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="alert alert-info d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-calculator me-2"></i><strong>Total:</strong></span>
+            <span class="fs-4 fw-bold" id="totalPreview">$0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg w-100">
+        <i class="fas fa-check me-2"></i>Create Invoice
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Delete Invoice Form -->
+<div class="row g-4 mb-4">
   <div class="col-md-6">
-    <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold bg-primary text-white">Create Invoice</div>
+    <div class="card shadow-sm">
+      <div class="card-header bg-danger text-white fw-bold">
+        <i class="fas fa-trash me-2"></i>Delete Invoice
+      </div>
       <div class="card-body">
-        <form method="POST">
-          {{ add_form.hidden_tag() }}
-          <input type="hidden" name="action" value="add">
+        <div class="alert alert-warning border-0">
+          <i class="fas fa-exclamation-triangle me-2"></i>
+          <strong>Warning:</strong> This will delete the invoice and all line items!
+        </div>
+        
+        <form method="POST" onsubmit="return confirm('Delete this invoice? This cannot be undone.');">
+          {{ delete_form.hidden_tag() }}
+          <input type="hidden" name="action" value="delete">
           
           <div class="mb-3">
-            {{ add_form.customer_id.label(class="form-label") }}
-            {{ add_form.customer_id(class="form-control", placeholder="Customer ID") }}
+            <label class="form-label">Invoice ID</label>
+            {{ delete_form.id(class="form-control", placeholder="Enter Invoice ID") }}
           </div>
-
-          <h6 class="fw-bold mt-3">Invoice Items</h6>
-          <small class="text-muted">Add at least one item</small>
           
-          {% for item_form in add_form.items %}
-          <div class="row mb-2 border-bottom pb-2">
-            <div class="col-md-4">
-              {{ item_form.pid.label(class="form-label") }}
-              {{ item_form.pid(class="form-control", placeholder="Product ID") }}
-            </div>
-            <div class="col-md-4">
-              {{ item_form.qty.label(class="form-label") }}
-              {{ item_form.qty(class="form-control", placeholder="Quantity") }}
-            </div>
-            <div class="col-md-4">
-              {{ item_form.price.label(class="form-label") }}
-              {{ item_form.price(class="form-control", step="0.01", placeholder="0.00") }}
-            </div>
-          </div>
-          {% endfor %}
-
-          {{ add_form.submit(class="btn btn-primary w-100 mt-3") }}
+          {{ delete_form.submit(class="btn btn-danger w-100") }}
         </form>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-md-6">
-    <div class="row">
-      <!-- Update Invoice Form -->
-      <div class="col-12">
-        <div class="card shadow-sm mb-4">
-          <div class="card-header fw-bold bg-warning text-dark">Update Invoice Total</div>
-          <div class="card-body">
-            <form method="POST">
-              {{ update_form.hidden_tag() }}
-              <input type="hidden" name="action" value="update">
-              <div class="row">
-                <div class="col-md-6 mb-3">
-                  {{ update_form.id.label(class="form-label") }}
-                  {{ update_form.id(class="form-control", placeholder="Invoice ID") }}
-                </div>
-                <div class="col-md-6 mb-3">
-                  {{ update_form.customer_id.label(class="form-label") }}
-                  {{ update_form.customer_id(class="form-control", placeholder="Customer ID") }}
-                </div>
-              </div>
-              <div class="row">
-                <div class="col-md-6 mb-3">
-                  {{ update_form.total.label(class="form-label") }}
-                  {{ update_form.total(class="form-control", step="0.01", placeholder="0.00") }}
-                </div>
-                <div class="col-md-6 mb-3">
-                  {{ update_form.date.label(class="form-label") }}
-                  {{ update_form.date(class="form-control", placeholder="YYYY-MM-DD HH:MM:SS") }}
-                </div>
-              </div>
-              {{ update_form.submit(class="btn btn-warning w-100") }}
-            </form>
-          </div>
-        </div>
-      </div>
-
-      <!-- Delete Invoice Form -->
-      <div class="col-12">
-        <div class="card shadow-sm mb-4">
-          <div class="card-header fw-bold bg-danger text-white">Delete Invoice</div>
-          <div class="card-body">
-            <form method="POST" onsubmit="return confirm('Delete this invoice? This cannot be undone.');">
-              {{ delete_form.hidden_tag() }}
-              <input type="hidden" name="action" value="delete">
-              <div class="mb-3">
-                {{ delete_form.id.label(class="form-label") }}
-                {{ delete_form.id(class="form-control", placeholder="Invoice ID") }}
-              </div>
-              {{ delete_form.submit(class="btn btn-danger w-100") }}
-            </form>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -103,88 +119,62 @@
 
 <!-- Invoice Table -->
 <div class="card shadow-sm mb-4">
-  <div class="card-header fw-bold">Invoice List ({{ invoices|length }} total)</div>
+  <div class="card-header fw-bold bg-light d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-table me-2"></i>Invoice History ({{ invoices|length }} total)</span>
+    <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+      <i class="fas fa-sync-alt me-1"></i>Refresh
+    </button>
+  </div>
   <div class="card-body">
     {% if invoices %}
     <div class="table-responsive">
-      <table class="table table-striped table-hover align-middle">
+      <table class="table table-hover align-middle">
         <thead class="table-light">
           <tr>
             <th>ID</th>
             <th>Invoice #</th>
-            <th>Customer ID</th>
+            <th>Customer</th>
             <th>Total</th>
             <th>Date</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
           {% for inv in invoices %}
           <tr>
             <td><span class="badge bg-secondary">{{ inv.id }}</span></td>
-            <td><code>{{ inv.invoice_number }}</code></td>
-            <td>{{ inv.customer_id }}</td>
+            <td><a href="{{ url_for('main.invoice_detail', iid=inv.id) }}"><code>{{ inv.invoice_number }}</code></a></td>
+            <td>
+              <a href="{{ url_for('main.customer_detail', cid=inv.customer_id) }}" class="text-decoration-none">
+                {{ inv.customer_name or 'Walk-in Customer' }}
+              </a>
+            </td>
             <td class="text-success fw-bold">${{ "%.2f"|format(inv.total) if inv.total else "0.00" }}</td>
             <td>{{ inv.date }}</td>
+            <td>
+              <a href="{{ url_for('main.invoice_detail', iid=inv.id) }}" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-eye me-1"></i>View
+              </a>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
     {% else %}
-    <p class="text-muted mb-0">No invoices found.</p>
+    <div class="text-center py-5">
+      <i class="fas fa-file-invoice fa-4x text-muted mb-3"></i>
+      <p class="text-muted">No invoices found. Create your first invoice above!</p>
+    </div>
     {% endif %}
   </div>
 </div>
 
-<!-- Invoice Chart -->
-<div class="card shadow-sm">
-  <div class="card-header fw-bold">Monthly Invoice Totals</div>
-  <div class="card-body">
-    <canvas id="invoiceChart"></canvas>
-  </div>
-</div>
+{% endblock %}
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% block scripts %}
 <script>
-  fetch("{{ url_for('main.api_dashboard_sales') }}")
-    .then(res => res.json())
-    .then(data => {
-      new Chart(document.getElementById("invoiceChart"), {
-        type: "bar",
-        data: {
-          labels: data.months,
-          datasets: [{
-            label: "Invoice Totals ($)",
-            data: data.sales,
-            backgroundColor: "#198754",
-            borderRadius: 5
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return "$" + context.formattedValue;
-                }
-              }
-            }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                callback: function(value) {
-                  return "$" + value;
-                }
-              }
-            }
-          }
-        }
-      });
-    })
-    .catch(err => console.error('Chart error:', err));
+  // The complex JS for this page is now handled in auto.js
+  // to improve maintainability and reduce code duplication.
 </script>
 {% endblock %}

@@ -1,17 +1,22 @@
 
-# ========================================
-# 2. UPDATE: biztrack/__init__.py
-# ========================================
-from flask import Flask
-from flask_wtf.csrf import CSRFProtect
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from biztrack.routes import main
-from biztrack.auth import auth_bp
-from biztrack.biztrack_db import init_db, seed_default_data, migrate_schema
-from biztrack.config import config_map
+# Standard Library
 import logging
 import os
+from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
+
+# Third-party Libraries
+from flask import Flask, g, jsonify
+import click
+
+# Local Application Imports
+from biztrack.config import config_map
+from biztrack.routes import main
+from biztrack.auth import auth_bp
+from .ai_routes import ai_bp
+from .extensions import limiter, csrf, db
+from .biztrack_db import get_connection, close_connection, init_db, seed_default_data, migrate_schema
+
 
 def create_app(config_name=None):
     
@@ -27,19 +32,21 @@ def create_app(config_name=None):
     app.config.from_object(config_map[config_name])
     
     # Initialize security extensions
-    csrf = CSRFProtect(app)
-    
-    limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri="memory://"
-    )
-    
+    csrf.init_app(app)
+    db.init_app(app)
+    limiter.init_app(app)
+
     # Register blueprints
     app.register_blueprint(main)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(ai_bp)
     
+    # Context processor to inject datetime into templates
+    @app.context_processor
+    def inject_datetime():
+        """Injects datetime into all templates."""
+        return {'datetime': datetime, 'timezone': timezone}
+
     # Security headers
     @app.after_request
     def set_security_headers(response):
@@ -54,12 +61,7 @@ def create_app(config_name=None):
     if not app.debug:
         if not os.path.exists('logs'):
             os.mkdir('logs')
-        from logging.handlers import RotatingFileHandler
-        file_handler = RotatingFileHandler(
-            'logs/biztrack.log',
-            maxBytes=10240000,
-            backupCount=10
-        )
+        file_handler = RotatingFileHandler('logs/biztrack.log', maxBytes=10240000, backupCount=10)
         file_handler.setFormatter(logging.Formatter(
             '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
         ))
@@ -67,21 +69,31 @@ def create_app(config_name=None):
         app.logger.addHandler(file_handler)
         app.logger.setLevel(logging.INFO)
         app.logger.info('BizTrack PRO startup')
-    
-    # Initialize database
-    with app.app_context():
+
+    # Register teardown function to close DB connection
+    app.teardown_appcontext(close_connection)
+
+    # Register custom CLI command for DB initialization
+    @app.cli.command("init-db")
+    def init_db_command():
+        """Clears existing data and creates new tables."""
         init_db()
-        seed_default_data()
         migrate_schema()
-    
+        seed_default_data()
+        click.echo("✅ Database initialized, migrated, and seeded.")
+
     # Health check endpoint
     @app.route('/health')
     def health_check():
-        from biztrack.biztrack_db import execute_query
-        try:
-            execute_query("SELECT 1;", fetchone=True)
-            return {"status": "healthy"}, 200
-        except Exception as e:
-            return {"status": "unhealthy", "error": str(e)}, 500
+        """Checks database connectivity for monitoring."""
+        with app.app_context():
+            try:
+                # Use the connection from the app context
+                conn = get_connection()
+                conn.execute("SELECT 1;")
+                return jsonify({"status": "healthy"}), 200
+            except Exception as e:
+                app.logger.error(f"Health check failed: {e}")
+                return jsonify({"status": "unhealthy", "error": str(e)}), 500
     
     return app

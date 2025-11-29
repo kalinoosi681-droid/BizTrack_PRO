@@ -27,6 +27,7 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
     
+    # Ensure SECRET_KEY is set in production environment
     @property
     def SECRET_KEY(self):
         key = os.environ.get('SECRET_KEY')

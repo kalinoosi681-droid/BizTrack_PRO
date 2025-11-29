@@ -1,13 +1,43 @@
 
-{% extends "layout.html" %}
+{% extends "base.html" %}
+{% block title %}Payroll Management{% endblock %}
 {% block content %}
-<h2 class="mb-4">Payroll Management</h2>
+<h1 class="page-title">
+  <i class="fas fa-money-check-alt me-2"></i>Payroll Management
+</h1>
+
+<!-- KPI Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-4 col-md-6">
+    <div class="card kpi-card shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="icon-box mb-3" style="background: linear-gradient(135deg, #28a745 0%, #218838 100%);">
+          <i class="fas fa-dollar-sign fa-2x text-white"></i>
+        </div>
+        <h6 class="text-muted text-uppercase mb-2">Total Payroll Disbursed</h6>
+        <h3 class="fw-bold mb-0 text-success">${{ "%.2f"|format(total_payroll_disbursed) }}</h3>
+        <small class="text-muted">Across {{ payrolls|length }} records</small>
+      </div>
+    </div>
+  </div>
+  <!-- ADVANCED UPGRADE: Monthly Payroll Chart -->
+  <div class="col-lg-8 col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-bold bg-light">
+        <i class="fas fa-chart-bar me-2"></i>Monthly Payroll Trend (Last 6 Months)
+      </div>
+      <div class="card-body">
+        <canvas id="monthlyPayrollChart" height="100"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="row">
   <!-- Add Payroll Form -->
   <div class="col-md-4">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold bg-primary text-white">Add Payroll</div>
+      <div class="card-header fw-bold bg-primary text-white"><i class="fas fa-plus-circle me-2"></i>Add Payroll Record</div>
       <div class="card-body">
         <form method="POST">
           {{ add_form.hidden_tag() }}
@@ -33,26 +63,26 @@
   <!-- Update Payroll Form -->
   <div class="col-md-4">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold bg-warning text-dark">Update Payroll</div>
+      <div class="card-header fw-bold bg-warning text-dark"><i class="fas fa-edit me-2"></i>Update Payroll Record</div>
       <div class="card-body">
         <form method="POST">
           {{ update_form.hidden_tag() }}
           <input type="hidden" name="action" value="update">
           <div class="mb-3">
             {{ update_form.id.label(class="form-label") }}
-            {{ update_form.id(class="form-control", placeholder="Payroll ID") }}
+            {{ update_form.id(class="form-control", id="update_payroll_id", placeholder="Payroll ID") }}
           </div>
           <div class="mb-3">
             {{ update_form.employee_name.label(class="form-label") }}
-            {{ update_form.employee_name(class="form-control", placeholder="New name") }}
+            {{ update_form.employee_name(class="form-control", id="update_employee_name", placeholder="New name") }}
           </div>
           <div class="mb-3">
             {{ update_form.salary.label(class="form-label") }}
-            {{ update_form.salary(class="form-control", step="0.01", placeholder="New salary") }}
+            {{ update_form.salary(class="form-control", id="update_salary", step="0.01", placeholder="New salary") }}
           </div>
           <div class="mb-3">
             {{ update_form.date.label(class="form-label") }}
-            {{ update_form.date(class="form-control", type="date") }}
+            {{ update_form.date(class="form-control", id="update_date", type="date") }}
           </div>
           {{ update_form.submit(class="btn btn-warning w-100") }}
         </form>
@@ -63,14 +93,14 @@
   <!-- Delete Payroll Form -->
   <div class="col-md-4">
     <div class="card shadow-sm mb-4">
-      <div class="card-header fw-bold bg-danger text-white">Delete Payroll</div>
+      <div class="card-header fw-bold bg-danger text-white"><i class="fas fa-trash me-2"></i>Delete Payroll Record</div>
       <div class="card-body">
         <form method="POST" onsubmit="return confirm('Delete this payroll record?');">
           {{ delete_form.hidden_tag() }}
           <input type="hidden" name="action" value="delete">
           <div class="mb-3">
             {{ delete_form.id.label(class="form-label") }}
-            {{ delete_form.id(class="form-control", placeholder="Payroll ID") }}
+            {{ delete_form.id(class="form-control", id="delete_payroll_id", placeholder="ID from table") }}
           </div>
           {{ delete_form.submit(class="btn btn-danger w-100") }}
         </form>
@@ -81,26 +111,42 @@
 
 <!-- Payroll Records Table -->
 <div class="card shadow-sm">
-  <div class="card-header fw-bold">Payroll Records ({{ payrolls|length }} total)</div>
+  <div class="card-header fw-bold bg-light d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-table me-2"></i>Payroll Records ({{ payrolls|length }} total)</span>
+    <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+      <i class="fas fa-sync-alt me-1"></i>Refresh
+    </button>
+  </div>
   <div class="card-body">
     {% if payrolls %}
       <div class="table-responsive">
-        <table class="table table-striped table-hover">
+        <table class="table table-hover align-middle">
           <thead class="table-light">
             <tr>
-              <th>ID</th>
-              <th>Employee</th>
-              <th>Salary</th>
-              <th>Date</th>
+              <th><i class="fas fa-hashtag me-1"></i>ID</th>
+              <th><i class="fas fa-user-tie me-1"></i>Employee</th>
+              <th><i class="fas fa-dollar-sign me-1"></i>Salary</th>
+              <th><i class="fas fa-calendar-alt me-1"></i>Date</th>
+              <th><i class="fas fa-check-circle me-1"></i>Status</th>
+              <th><i class="fas fa-cogs me-1"></i>Actions</th>
             </tr>
           </thead>
           <tbody>
             {% for p in payrolls %}
             <tr>
               <td><span class="badge bg-secondary">{{ p.id }}</span></td>
-              <td>{{ p.employee_name }}</td>
+              <td class="fw-semibold">{{ p.employee_name }}</td>
               <td class="text-success fw-bold">${{ "%.2f"|format(p.salary) }}</td>
               <td>{{ p.date }}</td>
+              <td><span class="badge bg-success">Paid</span></td>
+              <td>
+                <button class="btn btn-sm btn-outline-info edit-payroll-btn" data-id="{{ p.id }}" data-name="{{ p.employee_name }}" data-salary="{{ p.salary }}" data-date="{{ p.date }}" title="Edit Record">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <a href="#" class="btn btn-sm btn-outline-primary" title="View Payslip">
+                  <i class="fas fa-eye"></i>
+                </a>
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -111,4 +157,67 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- CRITICAL UI/UX FIX: Unified form population ---
+    function populateForms(payrollData) {
+        // Populate Update Form
+        document.getElementById('update_payroll_id').value = payrollData.id || '';
+        document.getElementById('update_employee_name').value = payrollData.name || '';
+        document.getElementById('update_salary').value = payrollData.salary || '';
+        document.getElementById('update_date').value = payrollData.date || '';
+
+        // Populate Delete Form
+        document.getElementById('delete_payroll_id').value = payrollData.id || '';
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Add event listeners to all edit buttons
+    document.querySelectorAll('.edit-payroll-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const payrollData = {
+                id: this.dataset.id,
+                name: this.dataset.name,
+                salary: this.dataset.salary,
+                date: this.dataset.date
+            };
+            populateForms(payrollData);
+        });
+    });
+
+    // --- ADVANCED UPGRADE: Monthly Payroll Chart ---
+    async function renderPayrollChart() {
+        const ctx = document.getElementById('monthlyPayrollChart').getContext('2d');
+        const apiData = await fetchJSON('/api/payroll/monthly');
+        if (!apiData) return;
+
+        const labels = Object.keys(apiData);
+        const data = Object.values(apiData);
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Total Payroll ($)',
+                    data: data,
+                    backgroundColor: 'rgba(40, 167, 69, 0.6)',
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value } } }
+            }
+        });
+    }
+
+    renderPayrollChart();
+});
+</script>
 {% endblock %}

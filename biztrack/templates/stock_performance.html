@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Stock Performance{% endblock %}
+{% block content %}
+<h1 class="page-title"><i class="fas fa-tachometer-alt me-2"></i>Stock Performance Analysis</h1>
+
+<div class="row">
+  <!-- Fast Moving Products -->
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm border-success">
+      <div class="card-header bg-success text-white fw-bold">
+        🔥 Fast Moving Products (Last 30 Days)
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>Units Sold</th>
+              </tr>
+            </thead>
+            <tbody id="fast-moving-body">
+              <tr><td colspan="3" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slow Moving Products -->
+  <div class="col-md-6 mb-4">
+    <div class="card shadow-sm border-warning">
+      <div class="card-header bg-warning text-dark fw-bold">
+        🐌 Slow Moving Products (Last 30 Days)
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Stock</th>
+                <th>Days Since Sale</th>
+              </tr>
+            </thead>
+            <tbody id="slow-moving-body">
+              <tr><td colspan="3" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Performance Chart -->
+<div class="row mt-4">
+  <div class="col-md-12">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold bg-light">
+        <i class="fas fa-chart-bubble me-2"></i>Slow-Moving Inventory Analysis
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">This chart helps identify problematic inventory. Look for large bubbles (high stock) on the right side (many days since last sale).</p>
+        <div style="height: 400px;">
+          <canvas id="performanceChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+  const fastMovingBody = document.getElementById('fast-moving-body');
+  const slowMovingBody = document.getElementById('slow-moving-body');
+  const chartCanvas = document.getElementById('performanceChart');
+
+  const data = await fetchJSON('/api/stock/performance');
+
+  if (!data) {
+    fastMovingBody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-4">Failed to load data.</td></tr>';
+    slowMovingBody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-4">Failed to load data.</td></tr>';
+    return;
+  }
+
+  // --- Render Fast-Moving Table ---
+  if (data.fast_moving.length > 0) {
+    fastMovingBody.innerHTML = data.fast_moving.map(p => `
+      <tr>
+        <td><a href="/product/${p.id}">${p.name}</a></td>
+        <td>${p.category}</td>
+        <td class="fw-bold text-success">${p.total_sold} units</td>
+      </tr>
+    `).join('');
+  } else {
+    fastMovingBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">No fast-moving products found.</td></tr>';
+  }
+
+  // --- Render Slow-Moving Table ---
+  if (data.slow_moving.length > 0) {
+    slowMovingBody.innerHTML = data.slow_moving.map(p => `
+      <tr>
+        <td><a href="/product/${p.id}">${p.name}</a></td>
+        <td>${p.qty} units</td>
+        <td class="fw-bold text-warning">${p.days_since_last_sale || 'Never Sold'}</td>
+      </tr>
+    `).join('');
+  } else {
+    slowMovingBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">All products are moving well!</td></tr>';
+  }
+
+  // --- ADVANCED UPGRADE: Render Bubble Chart for Slow-Moving Products ---
+  if (data.slow_moving.length > 0) {
+    const chartData = data.slow_moving.map(p => ({
+      x: p.days_since_last_sale || 30, // Days since sale (X-axis)
+      y: p.qty,                       // Current stock (Y-axis)
+      r: Math.max(5, p.total_sold * 5) // Bubble size based on units sold
+    }));
+
+    new Chart(chartCanvas.getContext('2d'), {
+      type: 'bubble',
+      data: {
+        datasets: [{
+          label: 'Slow-Moving Products',
+          data: chartData,
+          backgroundColor: 'rgba(255, 193, 7, 0.6)',
+          borderColor: 'rgba(255, 193, 7, 1)'
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { title: { display: true, text: 'Days Since Last Sale' } },
+          y: { beginAtZero: true, title: { display: true, text: 'Current Stock Quantity' } }
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const item = data.slow_moving[context.dataIndex];
+                return `${item.name}: Stock ${item.qty}, Sold ${item.total_sold}, ${item.days_since_last_sale || 'N/A'} days ago`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

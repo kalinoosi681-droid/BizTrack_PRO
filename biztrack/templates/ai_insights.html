@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}AI Insights{% endblock %}
+{% block content %}
+<h1 class="page-title">
+  <i class="fas fa-robot me-2"></i>AI Insights & Predictions
+</h1>
+
+<div class="row g-4 mb-4">
+  <!-- Sales Forecast Card -->
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white fw-bold">
+        <i class="fas fa-chart-line me-2"></i>7-Day Sales Forecast
+      </div>
+      <div class="card-body">
+        <!-- Product Search for Forecast -->
+        <div class="mb-3 position-relative">
+          <label for="forecastProductSearch" class="form-label">Select a Product to Forecast:</label>
+          <input type="text" id="forecastProductSearch" class="form-control" placeholder="Search for a product...">
+          <div id="forecastProductSuggest" class="dropdown-menu w-100" style="max-height: 250px; overflow-y: auto; z-index: 1050;"></div>
+        </div>
+        <div id="forecastContainer">
+          <div class="text-center text-muted py-5">
+            <i class="fas fa-search fa-2x mb-3"></i>
+            <p>Select a product to view its sales forecast.</p>
+          </div>
+          <canvas id="forecastChart" height="150" style="display: none;"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Reorder Alerts -->
+  <div class="col-lg-5">
+    <div class="card shadow-sm border-warning">
+      <div class="card-header bg-warning text-dark fw-bold">
+        <i class="fas fa-exclamation-triangle me-2"></i>Reorder Recommendations
+      </div>
+      <div class="card-body">
+        <!-- ADVANCED UPGRADE: Dynamic "What-If" Parameters -->
+        <div class="row g-2 mb-3">
+          <div class="col">
+            <label for="leadTimeDays" class="form-label small">Supplier Lead Time (Days)</label>
+            <input type="number" id="leadTimeDays" class="form-control form-control-sm" value="7" min="1">
+          </div>
+          <div class="col">
+            <label for="safetyStockDays" class="form-label small">Safety Stock (Days)</label>
+            <input type="number" id="safetyStockDays" class="form-control form-control-sm" value="3" min="0">
+          </div>
+        </div>
+        <button id="recalculateAlertsBtn" class="btn btn-sm btn-outline-warning w-100 mb-3"><i class="fas fa-calculator me-2"></i>Recalculate Alerts</button>
+
+        <div id="reorderAlerts" style="max-height: 400px; overflow-y: auto;">
+          <div class="text-center text-muted">
+            <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+            <p>Loading AI predictions...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI Insights Grid -->
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body">
+        <i class="fas fa-brain fa-3x text-primary mb-3"></i>
+        <h5>Smart Category Detection</h5>
+        <p class="text-muted">AI predicts categories with 90%+ accuracy</p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-4">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body">
+        <i class="fas fa-chart-pie fa-3x text-success mb-3"></i>
+        <h5>Price Optimization</h5>
+        <p class="text-muted">Dynamic pricing based on market data</p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-4">
+    <div class="card shadow-sm text-center h-100">
+      <div class="card-body">
+        <i class="fas fa-cube fa-3x text-warning mb-3"></i>
+        <h5>Inventory Forecasting</h5>
+        <p class="text-muted">Predict stockouts before they happen</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Function to fetch and display reorder alerts
+  async function fetchReorderAlerts() {
+    const reorderAlertsDiv = document.getElementById('reorderAlerts');
+    const leadTime = document.getElementById('leadTimeDays').value;
+    const safetyStock = document.getElementById('safetyStockDays').value;
+    const recalculateBtn = document.getElementById('recalculateAlertsBtn');
+
+    recalculateBtn.disabled = true;
+    recalculateBtn.innerHTML = `<i class="fas fa-spinner fa-spin me-2"></i>Recalculating...`;
+
+    try {
+      const data = await fetchJSON(`/api/ai/reorder-alerts?lead_time=${leadTime}&safety_stock=${safetyStock}`);
+
+      if (data && data.alerts && data.alerts.length > 0) {
+        let alertsHtml = '<div class="list-group list-group-flush">';
+        // CRITICAL FIX: Correctly generate the URL for each product.
+        // We pass a base URL from the backend to avoid hardcoding.
+        const productUrlBase = "{{ url_for('main.product_detail', pid=0) }}".slice(0, -1);
+
+        data.alerts.forEach(alert => {
+          let urgencyClass = 'warning';
+          if (alert.urgency === 'critical') urgencyClass = 'danger';
+          if (alert.urgency === 'high') urgencyClass = 'warning';
+          
+          alertsHtml += `
+            <a href="${productUrlBase}${alert.product_id}" class="list-group-item list-group-item-action">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1"><i class="fas fa-box me-2 text-${urgencyClass}"></i>${alert.product_name}</h6>
+                <span class="badge bg-${urgencyClass}">${alert.urgency.toUpperCase()}</span>
+              </div>
+              <p class="mb-1">${alert.recommendation}</p>
+              <small class="text-muted">Stock: ${alert.current_stock} | Reorder Qty: ${alert.reorder_qty}</small>
+            </a>`;
+        });
+        alertsHtml += '</div>';
+        reorderAlertsDiv.innerHTML = alertsHtml;
+      } else {
+        reorderAlertsDiv.innerHTML = `
+          <div class="text-center py-4">
+            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+            <p class="text-muted">No reorder alerts. Inventory is healthy!</p>
+          </div>
+        `;
+      }
+    } catch (error) {
+      console.error('Error fetching reorder recommendations:', error);
+      reorderAlertsDiv.innerHTML = `
+        <div class="alert alert-danger">
+          <i class="fas fa-exclamation-circle me-2"></i>Failed to load reorder recommendations.
+        </div>
+      `;
+    } finally {
+        recalculateBtn.disabled = false;
+        recalculateBtn.innerHTML = `<i class="fas fa-calculator me-2"></i>Recalculate Alerts`;
+    }
+  }
+
+  // Sales Forecast Logic
+  const forecastSearchInput = document.getElementById('forecastProductSearch');
+  const forecastSuggestMenu = document.getElementById('forecastProductSuggest');
+  const forecastContainer = document.getElementById('forecastContainer');
+  const forecastChartCanvas = document.getElementById('forecastChart');
+  let forecastChartInstance = null;
+
+  forecastSearchInput.addEventListener('input', debounce(async (e) => {
+    const q = e.target.value.trim();
+    if (!q) {
+      forecastSuggestMenu.classList.remove('show');
+      return;
+    }
+    const products = await fetchJSON(`/api/search/products?q=${encodeURIComponent(q)}`);
+    if (products && products.length > 0) {
+      forecastSuggestMenu.innerHTML = products.map(p => `
+        <button type="button" class="dropdown-item" data-id="${p.id}" data-name="${p.name}">
+          <strong>${p.name}</strong> <small class="text-muted">#${p.id}</small>
+        </button>
+      `).join('');
+      forecastSuggestMenu.classList.add('show');
+    } else {
+      forecastSuggestMenu.innerHTML = '<button class="dropdown-item disabled">No products found</button>';
+    }
+  }));
+
+  forecastSuggestMenu.addEventListener('click', (e) => {
+    const btn = e.target.closest('.dropdown-item');
+    if (!btn || !btn.dataset.id) return;
+
+    const productId = btn.dataset.id;
+    const productName = btn.dataset.name;
+
+    forecastSearchInput.value = productName;
+    forecastSuggestMenu.classList.remove('show');
+    fetchAndDisplayForecast(productId, productName);
+    forecastSearchInput.focus();
+  });
+
+  async function fetchAndDisplayForecast(productId, productName) {
+    forecastContainer.innerHTML = `
+      <div class="text-center text-muted py-5">
+        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+        <p>Generating forecast for <strong>${productName}</strong>...</p>
+      </div>`;
+
+    try {
+      const data = await fetchJSON(`/api/ai/forecast/${productId}`);
+      
+      if (!data || data.trend === 'insufficient_data') {
+        forecastContainer.innerHTML = `
+          <div class="alert alert-warning text-center">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Insufficient Data:</strong> ${data.recommendation || 'Not enough sales history to generate a forecast.'}
+          </div>`;
+        return;
+      }
+
+      // Clear container and show canvas
+      forecastContainer.innerHTML = '';
+      const canvas = document.createElement('canvas');
+      canvas.id = 'forecastChart';
+      canvas.height = 150;
+      forecastContainer.appendChild(canvas);
+
+      if (forecastChartInstance) {
+        forecastChartInstance.destroy();
+      }
+
+      try {
+        forecastChartInstance = new Chart(canvas.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: data.forecast.map(f => f.date),
+            datasets: [{
+              label: `Predicted Sales for ${productName}`,
+              data: data.forecast.map(f => f.predicted_qty),
+              borderColor: '#0d6efd',
+              backgroundColor: 'rgba(13, 110, 253, 0.1)',
+              fill: true,
+              tension: 0.4,
+              pointRadius: 5,
+              pointBackgroundColor: '#0d6efd',
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: true, position: 'top' },
+              title: {
+                display: true,
+                text: `Trend: ${data.trend.toUpperCase()} | Confidence: ${(data.confidence * 100).toFixed(0)}%`
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    return `Predicted Qty: ${context.formattedValue}`;
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Quantity'
+                }
+              }
+            }
+          }
+        });
+      } catch (chartError) {
+          console.error("Chart.js rendering error:", chartError);
+      }
+    } catch (error) {
+      console.error('Error fetching sales forecast:', error);
+      forecastContainer.innerHTML = `
+        <div class="alert alert-danger">
+          <i class="fas fa-exclamation-circle me-2"></i>Failed to load sales forecast.
+        </div>`;
+    }
+  }
+
+  // Close dropdown on outside click
+  document.addEventListener('click', (e) => {
+    if (!forecastSearchInput.contains(e.target) && !forecastSuggestMenu.contains(e.target)) {
+      forecastSuggestMenu.classList.remove('show');
+    }
+  });
+
+  // Call functions on page load
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('recalculateAlertsBtn').addEventListener('click', fetchReorderAlerts);
+    fetchReorderAlerts();
+  });
+</script>
+{% endblock %}

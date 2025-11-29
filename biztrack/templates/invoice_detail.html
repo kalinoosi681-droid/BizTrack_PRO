@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
+  <div>
+    <a href="{{ url_for('main.invoices') }}" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left me-2"></i>Back to Invoices
+    </a>
+  </div>
+  <div class="btn-toolbar" role="toolbar">
+    <div class="btn-group me-2" role="group">
+      <button type="button" class="btn btn-outline-primary" onclick="window.print();">
+        <i class="fas fa-print me-2"></i>Print
+      </button>
+      <button type="button" class="btn btn-outline-primary" id="download-pdf-btn">
+        <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span><i class="fas fa-download me-2"></i>Download PDF
+      </button>
+    </div>
+    <div class="btn-group" role="group">
+      <button type="button" class="btn btn-outline-success">
+        <i class="fas fa-paper-plane me-2"></i>Send via Email
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm" id="invoice-document">
+  <div class="card-header p-4">
+    <div class="row align-items-center">
+      <div class="col-md-6">
+        <h2 class="fw-bold mb-1">INVOICE</h2>
+        <p class="text-muted mb-0"><code>#{{ invoice.invoice_number }}</code></p>
+      </div>
+      <div class="col-md-6 text-md-end">
+        <h3 class="fw-bold text-primary">BizTrack PRO</h3>
+        <p class="text-muted mb-0">123 Business Rd, Suite 100<br>Commerce City, 12345</p>
+      </div>
+    </div>
+  </div>
+  <div class="card-body p-4">
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <h5 class="fw-bold">Bill To:</h5>
+        <p class="mb-1">
+          <a href="{{ url_for('main.customer_detail', cid=invoice.customer_id) }}" class="text-decoration-none fw-semibold">
+            {{ invoice.customer_name }}
+          </a>
+        </p>
+        <p class="text-muted mb-0">{{ invoice.customer_email or 'No email on file' }}</p>
+      </div>
+      <div class="col-md-6 text-md-end">
+        <div class="mb-2">
+          <span class="fw-bold">Invoice Date: </span>
+          <span>{{ invoice.date.split(' ')[0] }}</span>
+        </div>
+        <div>
+          <span class="fw-bold">Status: </span>
+          <span class="badge bg-success">Paid</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Line Items Table -->
+    {% if items %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th class="text-center">#</th>
+            <th>Item</th>
+            <th class="text-center">Quantity</th>
+            <th class="text-end">Unit Price</th>
+            <th class="text-end">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items -%}
+          <tr>
+            <td class="text-center">{{ loop.index }}</td>
+            <td>
+              <a href="{{ url_for('main.product_detail', pid=item.product_id) }}" class="text-decoration-none fw-semibold">
+                {{ item.product_name }}
+              </a>
+              <small class="d-block text-muted">Product ID: {{ item.product_id }}</small>
+            </td>
+            <td class="text-center">{{ item.qty }}</td>
+            <td class="text-end">${{ "%.2f"|format(item.price) }}</td>
+            <td class="text-end fw-bold">${{ "%.2f"|format(item.total_price) }}</td>
+          </tr>
+          {%- endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="row mt-4 justify-content-end">
+      <div class="col-md-5">
+        <table class="table table-sm">
+          <tbody>
+            <tr>
+              <td class="fw-semibold">Subtotal</td>
+              <td class="text-end">${{ "%.2f"|format(invoice.total / 1.07) }}</td>
+            </tr>
+            <tr>
+              <td class="fw-semibold">Tax (7% est.)</td>
+              <td class="text-end">${{ "%.2f"|format(invoice.total - (invoice.total / 1.07)) }}</td>
+            </tr>
+            <tr class="table-light">
+              <td class="fw-bold fs-5">TOTAL</td>
+              <td class="text-end fw-bold fs-5 text-success">${{ "%.2f"|format(invoice.total) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-muted text-center py-4">No line items found</p>
+    {% endif %}
+  </div>
+  <div class="card-footer text-center text-muted p-3">
+    Thank you for your business!
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('download-pdf-btn').addEventListener('click', function() {
+    const btn = this;
+    const spinner = btn.querySelector('.spinner-border');
+    const icon = btn.querySelector('.fa-download');
+
+    // Show spinner and disable button
+    spinner.classList.remove('d-none');
+    icon.classList.add('d-none');
+    btn.disabled = true;
+
+    const element = document.getElementById('invoice-document');
+    const opt = {
+        margin:       0.5,
+        filename:     'invoice-{{ invoice.invoice_number }}.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+
+    // New Promise-based usage:
+    html2pdf().set(opt).from(element).save().then(function() {
+        // Hide spinner and re-enable button
+        spinner.classList.add('d-none');
+        icon.classList.remove('d-none');
+        btn.disabled = false;
+    });
+});
+</script>
+{% endblock %}

@@ -1,180 +1,263 @@
-
-{% extends "layout.html" %}
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
 {% block content %}
-<h2 class="mb-4">Dashboard</h2>
 
-<!-- KPI Cards -->
-<div class="row mb-4">
-  <div class="col-md-3">
-    <div class="card text-center shadow-sm">
-      <div class="card-body">
-        <h6 class="text-muted">Total Sales</h6>
-        <h4 class="fw-bold">${{ "%.2f"|format(total_sales) }}</h4>
+<div class="dashboard-container">
+  <h1 class="page-title">
+    <i class="fas fa-chart-line me-2"></i>Real-Time Business Intelligence
+  </h1>
+
+  <!-- Global Search Bar - FIXED Z-INDEX -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="position-relative">
+            <div class="input-group">
+              <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search"></i></span>
+              <input id="global_search" class="form-control border-start-0" 
+                     placeholder="Search products, customers, invoices..." 
+                     autocomplete="off">
+            </div>
+            <div id="global_results" class="list-group position-absolute w-100 mt-1" style="z-index: 1056; max-height: 400px; overflow-y: auto;"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center shadow-sm">
-      <div class="card-body">
-        <h6 class="text-muted">Customers</h6>
-        <h4 class="fw-bold">{{ customer_count }}</h4>
+
+  <!-- REAL-TIME TRADING BOARD -->
+  <div class="row g-4 mb-4">
+    <div class="col-12">
+      <div class="card shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <div class="card-body text-white">
+          <div class="row text-center">
+            <div class="col-md-3">
+              <h6 class="text-white-50 mb-2">TODAY'S REVENUE</h6>
+              <h2 class="fw-bold mb-0" id="todayRevenue">$0.00</h2>
+              <small class="text-white-50"><i class="fas fa-clock me-1"></i>Real-Time</small>
+            </div>
+            <div class="col-md-3">
+              <h6 class="text-white-50 mb-2">THIS MONTH</h6>
+              <h2 class="fw-bold mb-0" id="monthRevenue">$0.00</h2>
+              <small class="text-white-50"><i class="fas fa-calendar me-1"></i>MTD Total</small>
+            </div>
+            <div class="col-md-3">
+              <h6 class="text-white-50 mb-2">TRANSACTIONS TODAY</h6>
+              <h2 class="fw-bold mb-0" id="todayTransactions">0</h2>
+              <small class="text-white-50"><i class="fas fa-receipt me-1"></i>Live Count</small>
+            </div>
+            <div class="col-md-3">
+              <h6 class="text-white-50 mb-2">AVG TRANSACTION</h6>
+              <h2 class="fw-bold mb-0" id="avgTransaction">$0.00</h2>
+              <small class="text-white-50"><i class="fas fa-chart-bar me-1"></i>Today's Avg</small>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center shadow-sm">
-      <div class="card-body">
-        <h6 class="text-muted">Products</h6>
-        <h4 class="fw-bold">{{ product_count }}</h4>
+
+  <!-- KPI Cards -->
+  <!-- KPI Cards + Live Transactions -->
+  <div class="row g-4 mb-4">
+    <!-- Total Sales -->
+    <div class="col-lg-3 col-md-6">
+      <div class="card kpi-card border-0 shadow-sm h-100">
+        <div class="card-body text-center">
+          <div class="icon-box mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);">
+            <i class="fas fa-dollar-sign fa-2x text-white"></i>
+          </div>
+          <h6 class="text-muted text-uppercase mb-2">Total Sales</h6>
+          <h3 class="fw-bold mb-0" style="color: #667eea;">${{ "%.2f"|format(total_sales) }}</h3>
+          <small class="text-success"><i class="fas fa-arrow-up"></i> All Time</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+      <div class="card kpi-card border-0 shadow-sm h-100">
+        <div class="card-body text-center">
+          <div class="icon-box mb-3" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <i class="fas fa-users fa-2x text-white"></i>
+          </div>
+          <h6 class="text-muted text-uppercase mb-2">Customers</h6>
+          <h3 class="fw-bold mb-0" style="color: #f5576c;">{{ customer_count }}</h3>
+          <small class="text-info"><i class="fas fa-user-plus"></i> Active</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+      <div class="card kpi-card border-0 shadow-sm h-100">
+        <div class="card-body text-center">
+          <div class="icon-box mb-3" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <i class="fas fa-box fa-2x text-white"></i>
+          </div>
+          <h6 class="text-muted text-uppercase mb-2">Products</h6>
+          <h3 class="fw-bold mb-0" style="color: #4facfe;">{{ product_count }}</h3>
+          <small class="text-primary"><i class="fas fa-cubes"></i> In Stock</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+      <div class="card kpi-card border-0 shadow-sm h-100">
+        <div class="card-body text-center">
+          <div class="icon-box mb-3" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+            <i class="fas fa-file-invoice fa-2x text-white"></i>
+          </div>
+          <h6 class="text-muted text-uppercase mb-2">Invoices</h6>
+          <h3 class="fw-bold mb-0" style="color: #fa709a;">{{ invoice_count }}</h3>
+          <small class="text-warning"><i class="fas fa-receipt"></i> Total</small>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center shadow-sm">
-      <div class="card-body">
-        <h6 class="text-muted">Invoices</h6>
-        <h4 class="fw-bold">{{ invoice_count }}</h4>
+
+  <!-- LIVE TRANSACTION FEED -->
+  <div class="row g-4 mb-4">
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header bg-success text-white fw-bold d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-bolt me-2"></i>Live Transaction Feed</span>
+          <span class="badge bg-light text-success" style="animation: pulse 2s infinite;">● LIVE</span>
+        </div>
+        <div class="card-body" style="min-height: 350px; max-height: 400px; overflow-y: auto;">
+          <div id="liveTransactions">
+            <div class="text-center text-muted py-5">
+              <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+              <p>Loading live transactions...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">
+          <i class="fas fa-clock me-2"></i>Hourly Sales (24h)
+        </div>
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-center" style="min-height: 300px;">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <canvas id="hourlyChart" style="display: none;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Low Stock Alerts -->
+  {% if low_stock %}
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card border-warning shadow-sm">
+        <div class="card-header bg-warning text-dark fw-bold d-flex align-items-center">
+          <i class="fas fa-exclamation-triangle me-2 badge-pulse"></i>
+          Low Stock Alerts ({{ low_stock|length }} items)
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>ID</th>
+                  <th>Product</th>
+                  <th>Current Qty</th>
+                  <th>Threshold</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for p in low_stock %}
+                <tr>
+                  <td><span class="badge bg-secondary">{{ p[0] }}</span></td>
+                  <td class="fw-semibold">{{ p[1] }}</td>
+                  <td><span class="badge bg-danger fs-6">{{ p[2] }}</span></td>
+                  <td><span class="badge bg-warning text-dark">{{ p[3] }}</span></td>
+                  <td>
+                    {% set percent = (p[2] / p[3] * 100) if p[3] > 0 else 0 %}
+                    <div class="progress" style="height: 20px;">
+                      <div class="progress-bar bg-danger" role="progressbar" style="width: {{ percent }}%">
+                        {{ "%.0f"|format(percent) }}%
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Charts Row -->
+  <div class="row g-4 mb-4">
+    <!-- Daily Performance Chart -->
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">
+          <i class="fas fa-chart-area me-2"></i>Daily Performance Metrics
+        </div>
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-center" style="min-height: 250px;">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <canvas id="dailyChart" height="100" style="display: none;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Distribution -->
+    <div class="col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-info text-white fw-bold">
+          <i class="fas fa-chart-pie me-2"></i>Product Categories
+        </div>
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-center" style="min-height: 250px;">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <canvas id="categoriesChart" style="display: none;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monthly Sales Chart -->
+  <div class="row g-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header bg-success text-white fw-bold">
+          <i class="fas fa-chart-line me-2"></i>Monthly Sales Trend
+        </div>
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-center" style="min-height: 200px;">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <canvas id="salesChart" height="80" style="display: none;"></canvas>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="row mb-4">
-  <div class="col-md-3">
-    <div class="card text-center shadow-sm">
-      <div class="card-body">
-        <h6 class="text-muted">Payroll Records</h6>
-        <h4 class="fw-bold">{{ payroll_count }}</h4>
-      </div>
-    </div>
-  </div>
-</div>
+{% endblock %}
 
-<!-- Low Stock Alerts -->
-<div class="row mb-4">
-  <div class="col-md-12">
-    <div class="card shadow-sm">
-      <div class="card-header fw-bold bg-warning text-dark">⚠️ Low Stock Alerts</div>
-      <div class="card-body">
-        {% if low_stock %}
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Product</th>
-                <th>Current Qty</th>
-                <th>Threshold</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for p in low_stock %}
-              <tr>
-                <td>{{ p[0] }}</td>
-                <td>{{ p[1] }}</td>
-                <td class="text-danger fw-bold">{{ p[2] }}</td>
-                <td>{{ p[3] }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        {% else %}
-          <p class="text-muted mb-0">✅ All products are above threshold.</p>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Data Utilities -->
-<div class="row mb-4">
-  <div class="col-md-12">
-    <div class="card shadow-sm">
-      <div class="card-header fw-bold">Quick Actions</div>
-      <div class="card-body">
-        <a href="{{ url_for('main.export_table', table='products') }}" class="btn btn-sm btn-outline-primary me-2">📥 Export Products</a>
-        <a href="{{ url_for('main.export_table', table='customers') }}" class="btn btn-sm btn-outline-primary me-2">📥 Export Customers</a>
-        <a href="{{ url_for('main.export_table', table='invoices') }}" class="btn btn-sm btn-outline-primary me-2">📥 Export Invoices</a>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Charts -->
-<div class="row">
-  <div class="col-md-6 mb-4">
-    <div class="card shadow-sm">
-      <div class="card-header fw-bold">Monthly Sales</div>
-      <div class="card-body">
-        <canvas id="salesChart"></canvas>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-6 mb-4">
-    <div class="card shadow-sm">
-      <div class="card-header fw-bold">Product Categories</div>
-      <div class="card-body">
-        <canvas id="categoriesChart"></canvas>
-      </div>
-    </div>
-  </div>
-</div>
-
+{% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-  fetch("{{ url_for('main.api_dashboard_sales') }}")
-    .then(res => res.json())
-    .then(data => {
-      new Chart(document.getElementById("salesChart"), {
-        type: "line",
-        data: {
-          labels: data.months,
-          datasets: [{
-            label: "Sales ($)",
-            data: data.sales,
-            borderColor: "#0d6efd",
-            backgroundColor: "rgba(13,110,253,0.1)",
-            fill: true,
-            tension: 0.4
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { display: true }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                callback: function(value) {
-                  return "$" + value;
-                }
-              }
-            }
-          }
-        }
-      });
-    });
-
-  fetch("{{ url_for('main.api_dashboard_categories') }}")
-    .then(res => res.json())
-    .then(data => {
-      new Chart(document.getElementById("categoriesChart"), {
-        type: "doughnut",
-        data: {
-          labels: data.categories,
-          datasets: [{
-            data: data.counts,
-            backgroundColor: ["#0d6efd", "#198754", "#ffc107", "#dc3545", "#6c757d"]
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { position: 'bottom' }
-          }
-        }
-      });
-    });
-</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
 {% endblock %}

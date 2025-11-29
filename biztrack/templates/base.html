@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Advanced Upgrade: Content Security Policy for enhanced security -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self'; 
+        script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; 
+        style-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com 'unsafe-inline'; 
+        font-src 'self' https://cdnjs.cloudflare.com;
+        img-src 'self' data:;
+        connect-src 'self';
+        frame-ancestors 'none';
+        form-action 'self';
+        base-uri 'self';
+    ">
+    <title>{% block title %}Dashboard{% endblock %} - BizTrack PRO</title>
+    
+    <!-- Advanced Upgrade: Preconnect to CDNs for faster asset loading -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+
+    <!-- Bootstrap CSS for styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <!-- Theme Loader Script -->
+    <script>
+        // Load theme from localStorage and set it on the HTML element before the page loads
+        (function() { const theme = localStorage.getItem('theme') || 'dark'; document.documentElement.setAttribute('data-bs-theme', theme); })();
+    </script>
+    {% block head_extra %}{% endblock %}
+    <style>
+        /* ========================================
+           AI CHAT WIDGET - ADVANCED UPGRADE
+           ======================================== */
+        #ai-chat-toggle-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1055; /* Higher than chat widget */
+            transition: transform 0.3s ease-in-out;
+        }
+
+        #ai-chat-widget {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            width: 420px;
+            height: 70vh;
+            max-height: 650px;
+            z-index: 1050;
+            border-radius: 1rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        #ai-chat-widget.hidden {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+        }
+
+        #ai-chat-widget:not(.hidden) {
+            opacity: 1;
+        }
+
+        #ai-chat-header {
+            cursor: move;
+        }
+
+        #ai-chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        /* Responsive adjustments for smaller screens */
+        @media (max-width: 768px) {
+            #ai-chat-widget {
+                width: 100%;
+                height: 100%;
+                max-height: 100%;
+                right: 0;
+                bottom: 0;
+                border-radius: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="container mt-4">
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark rounded shadow-sm">
+            <div class="container-fluid">
+                <a class="navbar-brand fw-bold" href="{{ url_for('main.dashboard') }}"><i class="fas fa-bolt me-2"></i>BizTrack PRO</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-nav" aria-controls="main-nav" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="main-nav">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <li class="nav-item"><a class="nav-link {% if request.path == url_for('main.dashboard') %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        <li class="nav-item"><a class="nav-link {% if 'product' in request.path %}active{% endif %}" href="{{ url_for('main.products') }}">Products</a></li>
+                        <li class="nav-item"><a class="nav-link {% if 'customer' in request.path %}active{% endif %}" href="{{ url_for('main.customers') }}">Customers</a></li>
+                        <li class="nav-item"><a class="nav-link {% if 'invoice' in request.path %}active{% endif %}" href="{{ url_for('main.invoices') }}">Invoices</a></li>
+                        <li class="nav-item"><a class="nav-link {% if 'payroll' in request.path %}active{% endif %}" href="{{ url_for('main.payrolls') }}">Payroll</a></li>
+                        <li class="nav-item"><a class="nav-link {% if 'ai-insights' in request.path %}active{% endif %}" href="{{ url_for('main.ai_insights') }}">AI Insights</a></li>
+                        <li class="nav-item"><a class="nav-link {% if 'utils' in request.path %}active{% endif %}" href="{{ url_for('main.utils') }}">Utilities</a></li>
+                    </ul>
+                    <div class="d-flex align-items-center">
+                        <div class="btn-group me-2" role="group"><button type="button" class="btn btn-outline-secondary btn-sm" id="theme-light-btn" title="Switch to light mode"><i class="fas fa-sun"></i></button><button type="button" class="btn btn-outline-secondary btn-sm" id="theme-dark-btn" title="Switch to dark mode"><i class="fas fa-moon"></i></button></div>
+                        <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- AI Chat Widget -->
+    <button id="ai-chat-toggle-btn" class="btn btn-primary btn-lg rounded-circle shadow-lg" aria-label="Toggle AI Chat">
+        <i class="fas fa-robot"></i>
+    </button>
+
+    <div id="ai-chat-widget" class="card shadow-lg hidden">
+        <div id="ai-chat-header" class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="fas fa-robot me-2"></i>AI Assistant</h6>
+            <div>
+                <button id="ai-chat-clear-btn" class="btn btn-sm btn-outline-light me-2" title="Clear Chat"><i class="fas fa-eraser"></i></button>
+                <button id="ai-chat-close-btn" class="btn-close btn-close-white"></button>
+            </div>
+        </div>
+        <div id="ai-chat-messages" class="card-body">
+        </div>
+        <div id="ai-chat-input-container" class="card-footer">
+            <form id="ai-chat-form" class="d-flex">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="text" id="ai-chat-input" class="form-control" placeholder="Ask the AI..." autocomplete="off" required>
+                <button type="submit" id="ai-chat-submit-btn" class="btn btn-primary ms-2" aria-label="Send Message">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <footer class="container text-center text-muted py-4">
+        <small>&copy; {{ datetime.now(timezone.utc).year }} BizTrack PRO. All Rights Reserved.</small>
+    </footer>
+    
+    <!-- JavaScript -->
+    <!-- html2pdf.js for client-side PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- Chart.js - Now loaded globally for all pages that need it -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Centralized scripts -->
+    <script src="{{ url_for('static', filename='js/auto.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/chat.js') }}" defer></script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
