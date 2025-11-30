@@ -1,0 +1,580 @@
+/* ========================================
+   BIZTRACK PRO - Professional Stylesheet
+   Lesotho Business Management System
+   ======================================== */
+
+/* Bootstrap Icons - Professional Icons */
+@import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css');
+
+/* ========================================
+   GLOBAL STYLES
+   ======================================== */
+
+:root {
+    --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --success-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    --danger-gradient: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
+    --warning-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    
+    --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    --shadow-md: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+    
+    --border-radius: 1rem;
+    --border-radius-sm: 0.5rem;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    line-height: 1.6;
+}
+
+/* ========================================
+   CRITICAL Z-INDEX FIXES FOR OVERLAYS
+   ======================================== */
+
+/* Global Search Results - Must be above all cards */
+#global_results {
+    z-index: 1060 !important;
+    position: absolute !important;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.25) !important;
+    background: var(--bs-body-bg) !important;
+    border: 1px solid var(--bs-border-color) !important;
+    border-radius: var(--border-radius) !important;
+}
+
+/* Product and Customer Search Dropdowns */
+#product_suggest,
+#customer_suggest,
+#inv_customer_suggest,
+.product_suggest {
+    z-index: 1055 !important;
+    position: absolute !important;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.25) !important;
+    background: var(--bs-body-bg) !important;
+    border: 1px solid var(--bs-border-color) !important;
+    border-radius: var(--border-radius-sm) !important;
+}
+
+/* AI Product Suggestions */
+#ai_product_suggestions {
+    z-index: 1050 !important;
+}
+
+/* Invoice Product Suggestions */
+#forecastProductSuggest {
+    z-index: 1055 !important;
+}
+
+/* CLI Suggestions */
+#cli-suggest {
+    z-index: 1070 !important;
+}
+
+/* Dark mode adjustments */
+[data-bs-theme="dark"] #global_results,
+[data-bs-theme="dark"] #product_suggest,
+[data-bs-theme="dark"] #customer_suggest,
+[data-bs-theme="dark"] .product_suggest {
+    background: rgba(33, 37, 41, 0.98) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* ========================================
+   PROFESSIONAL TYPOGRAPHY
+   ======================================== */
+
+.page-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    color: var(--bs-emphasis-color);
+    letter-spacing: -0.5px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.3px;
+}
+
+/* ========================================
+   CARD ENHANCEMENTS
+   ======================================== */
+
+.card {
+    border: none;
+    border-radius: var(--border-radius);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.card-header {
+    border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    padding: 1rem 1.5rem;
+}
+
+/* ========================================
+   BUTTON ENHANCEMENTS
+   ======================================== */
+
+.btn {
+    border-radius: var(--border-radius-sm);
+    font-weight: 500;
+    padding: 0.5rem 1.25rem;
+    transition: all 0.3s ease;
+    border: none;
+    letter-spacing: 0.3px;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-primary {
+    background: var(--primary-gradient);
+}
+
+.btn-success {
+    background: var(--success-gradient);
+}
+
+.btn-danger {
+    background: var(--danger-gradient);
+}
+
+.btn-warning {
+    background: var(--warning-gradient);
+}
+
+/* ========================================
+   FORM CONTROLS
+   ======================================== */
+
+.form-control,
+.form-select {
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--bs-border-color);
+    padding: 0.625rem 1rem;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.input-group-text {
+    border-radius: var(--border-radius-sm);
+    background-color: transparent;
+}
+
+/* ========================================
+   TABLE ENHANCEMENTS
+   ======================================== */
+
+.table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table thead th {
+    border-bottom: 2px solid var(--bs-border-color);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    padding: 1rem;
+}
+
+.table tbody tr {
+    transition: background-color 0.2s;
+}
+
+.table tbody tr:hover {
+    background-color: var(--bs-secondary-bg);
+}
+
+.table-responsive {
+    border-radius: var(--border-radius);
+}
+
+/* ========================================
+   BADGE ENHANCEMENTS
+   ======================================== */
+
+.badge {
+    border-radius: var(--border-radius-sm);
+    padding: 0.375rem 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+}
+
+/* ========================================
+   PROGRESS BAR
+   ======================================== */
+
+.progress {
+    border-radius: var(--border-radius-sm);
+    height: 0.75rem;
+    background-color: var(--bs-secondary-bg);
+}
+
+.progress-bar {
+    border-radius: var(--border-radius-sm);
+}
+
+/* ========================================
+   ALERT ENHANCEMENTS
+   ======================================== */
+
+.alert {
+    border-radius: var(--border-radius);
+    border: none;
+    padding: 1rem 1.25rem;
+}
+
+.alert-dismissible .btn-close {
+    padding: 1.25rem 1rem;
+}
+
+/* ========================================
+   AI CHAT WIDGET STYLES
+   ======================================== */
+
+#ai-chat-toggle-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--primary-gradient);
+    border: none;
+    box-shadow: var(--shadow-lg);
+    transition: all 0.3s ease;
+}
+
+#ai-chat-toggle-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 1rem 3rem rgba(102, 126, 234, 0.4);
+}
+
+#ai-chat-widget {
+    box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.2);
+}
+
+.chat-message {
+    animation: messageSlideIn 0.3s ease-out;
+}
+
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.chat-bubble {
+    border-radius: 1rem;
+    padding: 0.75rem 1rem;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.user-bubble {
+    background: var(--primary-gradient);
+    color: white;
+    border-bottom-right-radius: 0.25rem;
+}
+
+.ai-bubble {
+    background-color: var(--bs-secondary-bg);
+    border-bottom-left-radius: 0.25rem;
+}
+
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 1rem;
+}
+
+.typing-indicator span {
+    width: 8px;
+    height: 8px;
+    background-color: var(--bs-secondary);
+    border-radius: 50%;
+    animation: typingBounce 1.4s infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+    0%, 60%, 100% {
+        transform: translateY(0);
+    }
+    30% {
+        transform: translateY(-10px);
+    }
+}
+
+.welcome-message {
+    text-align: center;
+    padding: 1rem;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    border-radius: 1rem;
+}
+
+.suggestion-chip {
+    transition: all 0.2s ease;
+}
+
+.suggestion-chip:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+/* ========================================
+   DROPDOWN MENUS
+   ======================================== */
+
+.dropdown-menu {
+    border-radius: var(--border-radius);
+    border: none;
+    box-shadow: var(--shadow-lg);
+    padding: 0.5rem;
+}
+
+.dropdown-item {
+    border-radius: var(--border-radius-sm);
+    padding: 0.625rem 1rem;
+    transition: background-color 0.2s, transform 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: var(--bs-secondary-bg);
+    transform: translateX(3px);
+}
+
+/* ========================================
+   LIST GROUP
+   ======================================== */
+
+.list-group-item {
+    border-radius: var(--border-radius-sm) !important;
+    border: 1px solid var(--bs-border-color);
+    margin-bottom: 0.5rem;
+    transition: all 0.2s;
+}
+
+.list-group-item:hover {
+    background-color: var(--bs-secondary-bg);
+    transform: translateX(5px);
+}
+
+.list-group-item.list-group-item-action:hover {
+    background-color: var(--bs-secondary-bg) !important;
+    transform: translateX(5px);
+}
+
+/* ========================================
+   NAVBAR ENHANCEMENTS
+   ======================================== */
+
+.navbar {
+    border-radius: var(--border-radius);
+    padding: 1rem 1.5rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.navbar-brand {
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.5px;
+}
+
+.nav-link {
+    font-weight: 500;
+    transition: color 0.2s;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius-sm);
+}
+
+.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-link.active {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+/* ========================================
+   MODAL ENHANCEMENTS
+   ======================================== */
+
+.modal-content {
+    border-radius: var(--border-radius);
+    border: none;
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--bs-border-color);
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid var(--bs-border-color);
+    padding: 1.5rem;
+}
+
+/* ========================================
+   SPINNER / LOADING STATES
+   ======================================== */
+
+.spinner-border {
+    border-width: 0.2em;
+}
+
+/* ========================================
+   SCROLL BAR STYLING
+   ======================================== */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bs-secondary-bg);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bs-border-color);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--bs-secondary);
+}
+
+/* ========================================
+   UTILITY ANIMATIONS
+   ======================================== */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* ========================================
+   DARK MODE ADJUSTMENTS
+   ======================================== */
+
+[data-bs-theme="dark"] .card {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+[data-bs-theme="dark"] .table {
+    --bs-table-bg: transparent;
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .ai-bubble {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ========================================
+   RESPONSIVE DESIGN
+   ======================================== */
+
+@media (max-width: 768px) {
+    .page-title {
+        font-size: 1.5rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem;
+    }
+    
+    #ai-chat-toggle-btn {
+        width: 50px;
+        height: 50px;
+    }
+}
+
+/* ========================================
+   PRINT STYLES
+   ======================================== */
+
+@media print {
+    .no-print,
+    #ai-chat-widget,
+    #ai-chat-toggle-btn,
+    .navbar,
+    footer {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+}

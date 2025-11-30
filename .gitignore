@@ -16,3 +16,13 @@ twilio/
 biztrack.db
 *.csv
 biztrack_db
+
+
+*/conda-meta/
+*/pkgs/
+*/Library/
+*/Scripts/
+*/Include/
+
+# Ignore version-like folders (e.g., 0.14.0, 2.1.0)
+[0-9]*.[0-9]*.[0-9]*/
