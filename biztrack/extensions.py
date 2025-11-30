@@ -1,7 +1,9 @@
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
+from flask_login import LoginManager
 from .biztrack_db import init_db, migrate_schema, seed_default_data
+from .auth_models import User # User model is still needed for type hints if any
 
 class DatabaseManager:
     def __init__(self, app=None):
@@ -26,3 +28,16 @@ limiter = Limiter(
 
 csrf = CSRFProtect()
 db = DatabaseManager()
+
+login_manager = LoginManager()
+login_manager.login_view = "auth.login"  # The route to redirect to for login
+login_manager.login_message_category = "info" # Bootstrap category for flash message
+
+@login_manager.user_loader
+def load_user(user_id):
+    """
+    Loads a user from the database for Flask-Login.
+    This function is called on every request for an authenticated user.
+    """
+    # This now delegates user loading to the User model itself.
+    return User.get(user_id)

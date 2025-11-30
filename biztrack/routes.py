@@ -2,7 +2,7 @@
 # ENHANCED routes.py - Real-Time Intelligence
 # ========================================
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, send_file
-from .auth import login_required
+from flask_login import login_required, current_user  # FIXED: Import from flask_login
 from biztrack.forms import (
     CustomerAddForm, CustomerDeleteForm, CustomerUpdateForm, ProductBulkUpdateForm,
     ProductAddForm, ProductDeleteForm, ProductUpdateForm, ProductThresholdUpdateForm,
@@ -27,8 +27,16 @@ import os
 from datetime import datetime
 import csv
 from werkzeug.utils import secure_filename
+import logging
+
+logger = logging.getLogger(__name__)
 
 main = Blueprint("main", __name__)
+
+@main.route('/favicon.ico')
+def favicon():
+    """Handles browser requests for the site favicon."""
+    return '', 204
 
 # ========================================
 # DASHBOARD - REAL-TIME ANALYTICS
@@ -50,11 +58,8 @@ def dashboard():
     """
     kpis = execute_query(kpi_query, fetchone=True)
 
-    # This data is now fetched dynamically by dashboard.js, so server-side calculation is redundant.
-    # today_revenue and month_revenue are removed.
-
-    low_stock = get_low_stock_products()
-
+    # Low stock is now fetched dynamically by the client to be consistent with AI reorder alerts.
+    low_stock = [] # Pass an empty list, the client will populate this.
     return render_template(
         "index.html",
         low_stock=low_stock,
@@ -165,17 +170,6 @@ def api_dashboard_sales():
     
     return jsonify({"months": months_list, "sales": sales_list})
 
-@main.route("/api/dashboard/month-revenue")
-@login_required
-def api_month_revenue():
-    """Get current month's revenue"""
-    result = execute_query("""
-        SELECT COALESCE(SUM(total), 0) 
-        FROM invoices 
-        WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now');
-    """, fetchone=True)
-    return jsonify({"revenue": float(result[0]) if result else 0.0})
-
 @main.route("/api/dashboard/categories")
 @login_required
 def api_dashboard_categories():
@@ -193,6 +187,25 @@ def api_dashboard_categories():
     counts = [row[1] for row in rows] if rows else [0]
     
     return jsonify({"categories": categories, "counts": counts})
+
+@main.route("/api/dashboard/month-revenue")
+@login_required
+@csrf.exempt  # Read-only GET endpoint
+def api_month_revenue():
+    """Get current month's revenue - CRITICAL FOR DASHBOARD"""
+    try:
+        result = execute_query("""
+            SELECT COALESCE(SUM(total), 0) 
+            FROM invoices 
+            WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now');
+        """, fetchone=True)
+        
+        revenue = float(result[0]) if result and result[0] else 0.0
+        
+        return jsonify({"revenue": revenue})
+    except Exception as e:
+        logger.error(f"Month revenue API error: {e}")
+        return jsonify({"revenue": 0.0, "error": str(e)}), 500
 
 @main.route("/api/dashboard/daily")
 @login_required

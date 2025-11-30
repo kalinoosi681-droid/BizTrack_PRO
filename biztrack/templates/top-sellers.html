@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <tr>
           <td><span class="badge bg-secondary">${index + 1}</span></td>
           <td><a href="/product/${p.id}">${p.name}</a></td>
-          <td class="fw-bold text-success">$${p.revenue.toFixed(2)}</td>
+          <td class="fw-bold text-success">M${p.revenue.toFixed(2)}</td>
         </tr>
       `).join('');
     } else {
@@ -91,11 +91,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     topSellersChart = new Chart(chartCanvas.getContext('2d'), {
       type: 'bar',
-      data: { labels: productNames, datasets: [{ label: "Revenue ($)", data: revenues, backgroundColor: "#0d6efd", borderRadius: 5 }] },
+      data: { labels: productNames, datasets: [{ label: "Revenue (M)", data: revenues, backgroundColor: "#0d6efd", borderRadius: 5 }] },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: context => "$" + context.formattedValue } } },
-        scales: { x: { beginAtZero: true, ticks: { callback: value => "$" + value } } }
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: context => "M" + context.formattedValue } } },
+        scales: { x: { beginAtZero: true, ticks: { callback: value => "M" + value } } }
       }
     });
   }

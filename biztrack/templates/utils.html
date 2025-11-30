@@ -31,7 +31,7 @@
     </div>
   </div>
 
-  <!-- CSV Utilities - FIXED CSRF -->
+  <!-- CSV Utilities -->
   <div class="col-lg-5">
     <div class="card shadow-sm h-100">
       <div class="card-header fw-bold bg-primary text-white">
@@ -55,7 +55,7 @@
           </a>
         </div>
 
-        <!-- Import Form - FIXED -->
+        <!-- Import Form -->
         <h6 class="fw-bold mb-3"><i class="fas fa-upload me-2"></i>Import Data from CSV</h6>
         <form id="import-form" method="post" enctype="multipart/form-data">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -72,7 +72,6 @@
             <i class="fas fa-upload me-2"></i>Import Selected Table
           </button>
         </form>
-        <!-- Status area for AJAX import -->
         <div id="import-status" class="mt-3"></div>
       </div>
     </div>
@@ -191,160 +190,180 @@ document.addEventListener('DOMContentLoaded', function() {
   const importForm = document.getElementById('import-form');
   const tableSelect = document.getElementById('import-table-select');
   
-  // --- ADVANCED UPGRADE: AJAX CSV Import ---
-  importForm.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const table = tableSelect.value;
-    const fileInput = document.getElementById('import-file-input');
-    const submitBtn = document.getElementById('import-submit-btn');
-    const statusDiv = document.getElementById('import-status');
+  // AJAX CSV Import
+  if (importForm) {
+      importForm.addEventListener('submit', async function(e) {
+          e.preventDefault();
+          const table = tableSelect.value;
+          const fileInput = document.getElementById('import-file-input');
+          const submitBtn = document.getElementById('import-submit-btn');
+          const statusDiv = document.getElementById('import-status');
 
-    if (!fileInput.files || fileInput.files.length === 0) {
-      statusDiv.innerHTML = `<div class="alert alert-warning">Please select a file.</div>`;
-      return;
-    }
+          if (!fileInput.files || fileInput.files.length === 0) {
+              statusDiv.innerHTML = `<div class="alert alert-warning">Please select a file.</div>`;
+              return;
+          }
 
-    const formData = new FormData(this);
-    const originalBtnHTML = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Processing...`;
-    statusDiv.innerHTML = '';
+          const formData = new FormData(this);
+          const originalBtnHTML = submitBtn.innerHTML;
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Processing...`;
+          statusDiv.innerHTML = '';
 
-    try {
-      const response = await fetch(`/import/${table}`, { method: 'POST', body: formData });
-      // Since the response is a redirect, we check the 'redirected' flag.
-      // A successful import will redirect back to this page with a flashed message.
-      if (response.redirected) {
-        window.location.href = response.url; // Follow the redirect to see the flashed message.
-      } else {
-        throw new Error('Import failed. Server did not respond as expected.');
-      }
-    } catch (error) {
-      statusDiv.innerHTML = `<div class="alert alert-danger">Import failed: ${error.message}</div>`;
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = originalBtnHTML;
-    }
-  });
+          try {
+              const response = await fetch(`/import/${table}`, { method: 'POST', body: formData });
+              if (response.redirected) {
+                  window.location.href = response.url;
+              } else {
+                  throw new Error('Import failed. Server did not respond as expected.');
+              }
+          } catch (error) {
+              statusDiv.innerHTML = `<div class="alert alert-danger">Import failed: ${error.message}</div>`;
+              submitBtn.disabled = false;
+              submitBtn.innerHTML = originalBtnHTML;
+          }
+      });
+  }
 
-(function() {
+  // CLI TERMINAL - FIXED
   const input = document.getElementById("command");
   const terminal = document.getElementById("cli-terminal");
   const form = document.getElementById("cli-form");
   const suggest = document.getElementById("cli-suggest");
-  const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+  
+  if (!input || !terminal || !form) {
+      console.error('CLI elements not found');
+      return;
+  }
+
+  const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
   const history = [];
   let historyIndex = -1;
 
-  // --- CODE QUALITY: Consolidated command execution logic ---
-  async function runCliCommand(cmd) {
-    if (!cmd) return;
+  // CRITICAL FIX: Declare runCliCommand in global scope
+  window.runCliCommand = async function(cmd) {
+      if (!cmd) return;
 
-    // Add to history if it's a new command
-    if (history[history.length - 1] !== cmd) {
-      history.push(cmd);
-    }
-    historyIndex = history.length;
+      // Add to history if it's a new command
+      if (history[history.length - 1] !== cmd) {
+          history.push(cmd);
+      }
+      historyIndex = history.length;
 
-    terminal.innerHTML += `<div class="text-primary">> ${cmd}</div>`;
-    const thinkingDiv = document.createElement('div');
-    thinkingDiv.className = 'text-warning';
-    thinkingDiv.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Executing...`;
-    terminal.appendChild(thinkingDiv);
-    terminal.scrollTop = terminal.scrollHeight;
-
-    try {
-      const res = await fetch("{{ url_for('main.run_command') }}", {
-        method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
-        body: JSON.stringify({ command: cmd })
-      });
-      const data = await res.json();
-      thinkingDiv.className = data.output.includes('Error') ? 'text-danger' : 'text-success';
-      thinkingDiv.innerHTML = data.output.replace(/\n/g, '<br>');
-    } catch (error) {
-      thinkingDiv.className = 'text-danger';
-      thinkingDiv.innerHTML = `Error: ${error.message}`;
-    } finally {
+      terminal.innerHTML += `<div class="text-primary">> ${cmd}</div>`;
+      const thinkingDiv = document.createElement('div');
+      thinkingDiv.className = 'text-warning';
+      thinkingDiv.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Executing...`;
+      terminal.appendChild(thinkingDiv);
       terminal.scrollTop = terminal.scrollHeight;
-      input.value = "";
-      suggest.innerHTML = "";
-    }
-  }
-  window.runCliCommand = runCliCommand; // Expose to global scope for onclick handlers
+
+      try {
+          const res = await fetch("/run_command", {
+              method: "POST",
+              headers: {
+                  "Content-Type": "application/json",
+                  "X-CSRFToken": csrfToken
+              },
+              body: JSON.stringify({ command: cmd })
+          });
+          
+          if (!res.ok) {
+              throw new Error(`HTTP ${res.status}`);
+          }
+          
+          const data = await res.json();
+          thinkingDiv.className = data.output.includes('Error') ? 'text-danger' : 'text-success';
+          thinkingDiv.innerHTML = data.output.replace(/\n/g, '<br>');
+      } catch (error) {
+          thinkingDiv.className = 'text-danger';
+          thinkingDiv.innerHTML = `Error: ${error.message}`;
+      } finally {
+          terminal.scrollTop = terminal.scrollHeight;
+          if (input) {
+              input.value = "";
+              if (suggest) suggest.innerHTML = "";
+          }
+      }
+  };
 
   // Command history navigation
   input.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowUp") {
-      if (history.length) {
-        historyIndex = Math.max(0, historyIndex - 1);
-        input.value = history[historyIndex];
+      if (e.key === "ArrowUp") {
+          e.preventDefault();
+          if (history.length) {
+              historyIndex = Math.max(0, historyIndex - 1);
+              input.value = history[historyIndex];
+          }
+      } else if (e.key === "ArrowDown") {
+          e.preventDefault();
+          if (history.length) {
+              historyIndex = Math.min(history.length - 1, historyIndex + 1);
+              input.value = history[historyIndex];
+          }
+      } else if (e.key === "Enter") {
+          historyIndex = history.length;
       }
-      e.preventDefault();
-    } else if (e.key === "ArrowDown") {
-      if (history.length) {
-        historyIndex = Math.min(history.length - 1, historyIndex + 1);
-        input.value = history[historyIndex];
-      }
-      e.preventDefault();
-    } else if (e.key === "Enter") {
-      historyIndex = history.length;
-    }
   });
 
   // Form submission
   form.addEventListener("submit", async function(e) {
-    e.preventDefault();
-    const cmd = input.value.trim();
-    runCliCommand(cmd);
+      e.preventDefault();
+      const cmd = input.value.trim();
+      if (cmd) {
+          window.runCliCommand(cmd);
+      }
   });
 
   // Autocomplete
   const allowedCommands = ['backup', 'dedupe', 'stats', 'health', 'help'];
 
   input.addEventListener("input", () => {
-    const q = input.value.toLowerCase();
-    suggest.innerHTML = "";
-    
-    if (!q) return;
-    
-    const matches = allowedCommands.filter(c => c.startsWith(q));
-    
-    if (matches.length > 0) {
-      matches.forEach(cmd => {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.className = "list-group-item list-group-item-action";
-        item.textContent = cmd;
-        item.onclick = () => { 
-          input.value = cmd; 
-          suggest.innerHTML = ""; 
-          input.focus();
-        };
-        suggest.appendChild(item);
-      });
-    }
+      const q = input.value.toLowerCase();
+      suggest.innerHTML = "";
+      
+      if (!q) return;
+      
+      const matches = allowedCommands.filter(c => c.startsWith(q));
+      
+      if (matches.length > 0) {
+          matches.forEach(cmd => {
+              const item = document.createElement("button");
+              item.type = "button";
+              item.className = "list-group-item list-group-item-action";
+              item.textContent = cmd;
+              item.onclick = () => { 
+                  input.value = cmd; 
+                  suggest.innerHTML = ""; 
+                  input.focus();
+              };
+              suggest.appendChild(item);
+          });
+      }
   });
 
   // Close suggestions on outside click
   document.addEventListener("click", (e) => {
-    if (!suggest.contains(e.target) && e.target !== input) {
-      suggest.innerHTML = "";
-    }
+      if (!suggest.contains(e.target) && e.target !== input) {
+          suggest.innerHTML = "";
+      }
   });
 
-  // Handle command reference help
+  // Handle help command shortcut
   input.addEventListener("keydown", (e) => {
-    if (e.key === "?" && input.value === "") {
-      e.preventDefault();
-      terminal.innerHTML += `<div class="text-info">
+      if (e.key === "?" && input.value === "") {
+          e.preventDefault();
+          terminal.innerHTML += `<div class="text-info">
 Available Commands:
   backup  - Create database backup
   dedupe  - Remove duplicate records
   stats   - Show database statistics
   health  - Check database health
 </div><br>`;
-      terminal.scrollTop = terminal.scrollHeight;
-    }
+          terminal.scrollTop = terminal.scrollHeight;
+      }
   });
-})();
+
+  console.log('✅ BizTrack CLI initialized successfully');
+});
 </script>
 {% endblock %}

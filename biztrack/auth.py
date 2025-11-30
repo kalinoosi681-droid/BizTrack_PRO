@@ -2,9 +2,9 @@
 # ========================================
 # auth.py
 # ========================================
-
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import login_user, logout_user, login_required, current_user
 from biztrack.biztrack_db import execute_query, get_user_by_username, get_user_by_token
 import os
 import logging
@@ -12,6 +12,7 @@ import secrets
 from functools import wraps
 from datetime import datetime, timedelta
 from .forms import LoginForm, RegisterForm, ForgotPasswordForm, ResetPasswordForm
+from .auth_models import User
 
 auth_bp = Blueprint("auth", __name__, template_folder="templates")
 
@@ -38,48 +39,39 @@ def setup_admin_if_needed():
 # The initialization is now handled by the test fixtures or run.py
 # setup_admin_if_needed()
 
-def login_required(func):
-    """Decorator to require login for routes"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if "user_id" not in session:
-            flash("Please log in to access this page", "warning")
-            return redirect(url_for("auth.login"))
-        return func(*args, **kwargs)
-    return wrapper
-
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+
     form = LoginForm()
     if form.validate_on_submit():
         username = form.username.data.strip()
         password = form.password.data
         remember = form.remember.data
 
-        user = get_user_by_username(username)
+        user_data = get_user_by_username(username)
 
         # Check if account is locked
-        if user and user.get("locked_until") and datetime.now() < datetime.fromisoformat(user["locked_until"]):
+        if user_data and user_data.get("locked_until") and datetime.now() < datetime.fromisoformat(user_data["locked_until"]):
             flash(f"Account is temporarily locked. Please try again later.", "danger")
             return render_template("login.html", form=form)
 
-        if user and check_password_hash(user["password"], password):
+        if user_data and check_password_hash(user_data["password"], password):
+            # Create User object for Flask-Login
+            user = User(user_data)
+            
             # Reset failed attempts on successful login
-            execute_query("UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?;", (user["id"],), commit=True)
+            execute_query("UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?;", (user.id,), commit=True)
 
-            # Mitigate session fixation by clearing the old session and creating a new one.
-            session.clear()
-
-            # Populate the new session
-            session["user_id"] = user["id"]
-            session["username"] = username  # Store username in session
-            session.permanent = remember  # Set session lifetime based on "Remember Me"
+            # Use Flask-Login to manage the session
+            login_user(user, remember=remember)
             flash("Login successful!", "success")
             return redirect(url_for("main.dashboard"))
         else:
             # Handle failed login attempt
-            if user:
-                new_attempts = user.get("failed_attempts", 0) + 1
+            if user_data:
+                new_attempts = user_data.get("failed_attempts", 0) + 1
                 lock_until = None
                 
                 # Lock account after 5 failed attempts for 15 minutes
@@ -91,7 +83,7 @@ def login():
                 else:
                     execute_query(
                         "UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?;",
-                        (new_attempts, lock_until, user["id"]),
+                        (new_attempts, lock_until, user_data["id"]),
                         commit=True
                     )
 
@@ -175,6 +167,6 @@ def reset_password(token):
 
 @auth_bp.route("/logout")
 def logout():
-    session.clear()
+    logout_user()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))

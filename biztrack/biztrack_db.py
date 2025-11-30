@@ -526,6 +526,15 @@ def get_user_by_token(token: str) -> Optional[dict]:
     row = execute_query("SELECT * FROM users WHERE reset_token=?;", (token,), fetchone=True)
     return dict(zip(columns, row)) if row else None
 
+def get_user_by_id(user_id: int) -> Optional[dict]:
+    """
+    Returns a user dict by user ID or None.
+    Used by Flask-Login's user_loader.
+    """
+    columns = _get_columns("users")
+    row = execute_query("SELECT * FROM users WHERE id=?;", (user_id,), fetchone=True)
+    return dict(zip(columns, row)) if row else None
+
 # ============================
 # Product CRUD & Thresholds
 # ============================

@@ -6,16 +6,18 @@
   <i class="fas fa-robot me-2"></i>AI-Powered Product Management
 </h1>
 
-<!-- Search Bar - FIXED Z-INDEX -->
+<!-- Search Bar -->
 <div class="row mb-4">
   <div class="col-12">
     <div class="card shadow-sm">
       <div class="card-body">
-        <div class="input-group input-group-lg">
-          <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search"></i></span>
-          <input id="product_search" type="text" class="form-control border-start-0"
-                 placeholder="Search by ID, name, or category to populate the update form..." 
-                 autocomplete="off">
+        <div class="position-relative">
+          <div class="input-group input-group-lg">
+            <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search"></i></span>
+            <input id="product_search" type="text" class="form-control border-start-0"
+                   placeholder="Search by ID, name, or category to populate the update form..." 
+                   autocomplete="off">
+          </div>
           <div id="product_suggest" class="dropdown-menu w-100" style="max-height: 400px; overflow-y: auto;"></div>
         </div>
       </div>
@@ -53,10 +55,9 @@
             <div class="col-6 mb-3">
               <label class="form-label"><i class="fas fa-cubes me-1"></i>Quantity</label>
               {{ add_form.qty(class="form-control", id="add_product_qty", placeholder="AI suggests...", min="0", **{'autocomplete': 'off'}) }}
-              <small id="qtyHint" class="text-info d-none"></small>
             </div>
             <div class="col-6 mb-3">
-              <label class="form-label"><i class="fas fa-dollar-sign me-1"></i>Price</label>
+              <label class="form-label"><i class="fas fa-dollar-sign me-1"></i>Price (M)</label>
               {{ add_form.price(class="form-control", id="add_product_price", step="0.01", placeholder="AI suggests...", **{'autocomplete': 'off'}) }}
             </div>
           </div>
@@ -99,7 +100,7 @@
               {{ update_form.qty(class="form-control", id="update_product_qty", placeholder="Qty") }}
             </div>
             <div class="col-6 mb-3">
-              <label class="form-label">Price</label>
+              <label class="form-label">Price (M)</label>
               {{ update_form.price(class="form-control", id="update_product_price", step="0.01", placeholder="Price") }}
             </div>
           </div>
@@ -202,10 +203,10 @@
                 {% else %}<span class="badge bg-success fs-6">{{ p.qty }}</span>
                 {% endif %}
               </td>
-              <td class="text-success fw-bold">${{ "%.2f"|format(p.price) }}</td>
+              <td class="text-success fw-bold">M{{ "%.2f"|format(p.price) }}</td>
               <td>
                 {% if p.perf_flag == "🔥 Fast" %}<span class="badge bg-success">{{ p.perf_flag }}</span>
-                {% elif p.perf_flag == "🐢 Slow" %}<span class="badge bg-danger">{{ p.perf_flag }}</span>
+                {% elif p.perf_flag == "� Slow" %}<span class="badge bg-danger">{{ p.perf_flag }}</span>
                 {% else %}<span class="badge bg-warning text-dark">{{ p.perf_flag }}</span>
                 {% endif %}
               </td>
@@ -237,7 +238,7 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // --- Edit Button Handler ---
+    // FIXED: Edit Button Handler
     document.querySelectorAll('.edit-product-btn').forEach(button => {
         button.addEventListener('click', function() {
             document.getElementById('update_product_id').value = this.dataset.id;
@@ -245,13 +246,11 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('update_product_category').value = this.dataset.category;
             document.getElementById('update_product_qty').value = this.dataset.qty;
             document.getElementById('update_product_price').value = this.dataset.price;
-            
-            // Scroll to the top to make the form visible
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
     });
 
-    // --- Bulk Actions UI Handler ---
+    // FIXED: Bulk Actions UI Handler
     const selectAllCheckbox = document.getElementById('select-all-products');
     const productCheckboxes = document.querySelectorAll('.product-checkbox');
     const bulkActionsPanel = document.getElementById('bulk-actions-panel');
@@ -283,7 +282,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     bulkActionSelect.addEventListener('change', toggleActionInputs);
 
-    // Initial state on page load
     toggleBulkPanel();
     toggleActionInputs();
 });

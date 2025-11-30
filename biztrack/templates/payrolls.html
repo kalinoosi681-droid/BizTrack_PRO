@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 {% block title %}Payroll Management{% endblock %}
 {% block content %}
@@ -15,12 +14,12 @@
           <i class="fas fa-dollar-sign fa-2x text-white"></i>
         </div>
         <h6 class="text-muted text-uppercase mb-2">Total Payroll Disbursed</h6>
-        <h3 class="fw-bold mb-0 text-success">${{ "%.2f"|format(total_payroll_disbursed) }}</h3>
+        <h3 class="fw-bold mb-0 text-success">M{{ "%.2f"|format(total_payroll_disbursed) }}</h3>
         <small class="text-muted">Across {{ payrolls|length }} records</small>
       </div>
     </div>
   </div>
-  <!-- ADVANCED UPGRADE: Monthly Payroll Chart -->
+  <!-- Monthly Payroll Chart -->
   <div class="col-lg-8 col-md-6">
     <div class="card shadow-sm h-100">
       <div class="card-header fw-bold bg-light">
@@ -136,7 +135,7 @@
             <tr>
               <td><span class="badge bg-secondary">{{ p.id }}</span></td>
               <td class="fw-semibold">{{ p.employee_name }}</td>
-              <td class="text-success fw-bold">${{ "%.2f"|format(p.salary) }}</td>
+              <td class="text-success fw-bold">M{{ "%.2f"|format(p.salary) }}</td>
               <td>{{ p.date }}</td>
               <td><span class="badge bg-success">Paid</span></td>
               <td>
@@ -162,17 +161,15 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // --- CRITICAL UI/UX FIX: Unified form population ---
+    const CURRENCY = 'M'; // Lesotho Maloti
+
+    // FIXED: Unified form population
     function populateForms(payrollData) {
-        // Populate Update Form
         document.getElementById('update_payroll_id').value = payrollData.id || '';
         document.getElementById('update_employee_name').value = payrollData.name || '';
         document.getElementById('update_salary').value = payrollData.salary || '';
         document.getElementById('update_date').value = payrollData.date || '';
-
-        // Populate Delete Form
         document.getElementById('delete_payroll_id').value = payrollData.id || '';
-
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -189,32 +186,86 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // --- ADVANCED UPGRADE: Monthly Payroll Chart ---
+    // FIXED: Monthly Payroll Chart
     async function renderPayrollChart() {
-        const ctx = document.getElementById('monthlyPayrollChart').getContext('2d');
-        const apiData = await fetchJSON('/api/payroll/monthly');
-        if (!apiData) return;
+        const canvas = document.getElementById('monthlyPayrollChart');
+        if (!canvas) {
+            console.warn('Payroll chart canvas not found');
+            return;
+        }
 
-        const labels = Object.keys(apiData);
-        const data = Object.values(apiData);
+        const ctx = canvas.getContext('2d');
+        
+        try {
+            const response = await fetch('/api/payroll/monthly');
+            if (!response.ok) throw new Error('Failed to fetch payroll data');
+            
+            const apiData = await response.json();
 
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Total Payroll ($)',
-                    data: data,
-                    backgroundColor: 'rgba(40, 167, 69, 0.6)',
-                    borderColor: 'rgba(40, 167, 69, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value } } }
+            if (!apiData || Object.keys(apiData).length === 0) {
+                console.warn('No payroll data available');
+                ctx.canvas.parentElement.innerHTML = '<div class="alert alert-info">No payroll data available yet. Add payroll records to see trends.</div>';
+                return;
             }
-        });
+
+            // Generate last 6 months labels
+            const months = [];
+            const data = [];
+            const currentDate = new Date();
+            
+            for (let i = 5; i >= 0; i--) {
+                const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+                const monthKey = date.toISOString().slice(0, 7); // YYYY-MM format
+                const monthLabel = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                
+                months.push(monthLabel);
+                data.push(apiData[monthKey] || 0);
+            }
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: months,
+                    datasets: [{
+                        label: `Total Payroll (${CURRENCY})`,
+                        data: data,
+                        backgroundColor: 'rgba(40, 167, 69, 0.6)',
+                        borderColor: 'rgba(40, 167, 69, 1)',
+                        borderWidth: 2,
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${CURRENCY}${context.parsed.y.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return CURRENCY + value.toFixed(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            console.log('✅ Payroll chart rendered successfully');
+        } catch (error) {
+            console.error('Failed to render payroll chart:', error);
+            ctx.canvas.parentElement.innerHTML = '<div class="alert alert-danger">Failed to load payroll chart. Please refresh the page.</div>';
+        }
     }
 
     renderPayrollChart();

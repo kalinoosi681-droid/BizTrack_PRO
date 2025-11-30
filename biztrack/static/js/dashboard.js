@@ -31,8 +31,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newHourlyDataJSON === lastHourlyDataJSON) return;
             lastHourlyDataJSON = newHourlyDataJSON;
 
-            const ctx = document.getElementById('hourlyChart')?.getContext('2d');
-            if (!ctx) return;
+            const canvas = document.getElementById('hourlyChart');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
 
             const labels = hourlyData.map(h => h.hour);
             const data = hourlyData.map(h => h.revenue);
@@ -40,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (hourlyChartInstance) {
                 hourlyChartInstance.data.labels = labels;
                 hourlyChartInstance.data.datasets[0].data = data;
-                hourlyChartInstance.update('none'); // Skip animation for performance
+                hourlyChartInstance.update('none');
             } else {
                 hourlyChartInstance = new Chart(ctx, {
                     type: 'line',
@@ -59,14 +61,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true } }
+                        scales: { 
+                            y: { 
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return CURRENCY + value.toFixed(0);
+                                    }
+                                }
+                            } 
+                        }
                     }
                 });
             }
 
             // Show canvas and hide spinner
-            ctx.canvas.style.display = 'block';
-            const spinner = ctx.canvas.parentElement.querySelector('.spinner-border');
+            const container = canvas.parentElement;
+            canvas.style.display = 'block';
+            const spinner = container.querySelector('.spinner-border');
             if (spinner) spinner.style.display = 'none';
         };
 
@@ -124,13 +136,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const init = () => {
             fetchData();
-            setInterval(fetchData, 5000); // Update every 5 seconds
+            setInterval(fetchData, 5000);
         };
 
         return { init };
     })();
 
-    // Static Charts Module
+    // Static Charts Module - FIXED DAILY CHART WITH MARGIN LINES
     const ChartsModule = (() => {
         const createChart = async (elementId, url, configFactory) => {
             const canvas = document.getElementById(elementId);
@@ -166,42 +178,110 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const initDailyChart = () => {
-            createChart('dailyChart', '/api/dashboard/daily', d => ({
-                type: "bar",
-                data: {
-                    labels: d.dates,
-                    datasets: [{
-                        label: `Revenue (${CURRENCY})`,
-                        data: d.revenue,
-                        backgroundColor: "rgba(13, 110, 253, 0.8)",
-                        borderRadius: 4,
-                        yAxisID: 'y'
-                    }, {
-                        label: "Margin (%)",
-                        data: d.margin,
-                        type: "line",
-                        borderColor: "#198754",
-                        backgroundColor: "rgba(25, 135, 84, 0.1)",
-                        fill: true,
-                        tension: 0.4,
-                        yAxisID: 'y1',
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: true } },
-                    scales: {
-                        y: { beginAtZero: true, position: 'left', title: { display: true, text: `Revenue (${CURRENCY})` } },
-                        y1: {
-                            beginAtZero: true,
-                            position: 'right',
-                            grid: { display: false },
-                            title: { display: true, text: 'Margin (%)' }
+            createChart('dailyChart', '/api/dashboard/daily', d => {
+                // CRITICAL FIX: Ensure we have data
+                if (!d.dates || d.dates.length === 0) {
+                    console.warn('No daily data available');
+                    return {
+                        type: 'bar',
+                        data: { labels: [], datasets: [] },
+                        options: {}
+                    };
+                }
+
+                return {
+                    type: "bar",
+                    data: {
+                        labels: d.dates,
+                        datasets: [
+                            {
+                                label: `Revenue (${CURRENCY})`,
+                                data: d.revenue,
+                                backgroundColor: "rgba(13, 110, 253, 0.8)",
+                                borderRadius: 4,
+                                yAxisID: 'y',
+                                order: 2
+                            },
+                            {
+                                label: "Margin (%)",
+                                data: d.margin,
+                                type: "line",
+                                borderColor: "#198754",
+                                backgroundColor: "rgba(25, 135, 84, 0.1)",
+                                fill: true,
+                                tension: 0.4,
+                                yAxisID: 'y1',
+                                pointRadius: 4,
+                                pointBackgroundColor: "#198754",
+                                pointBorderColor: "#fff",
+                                pointBorderWidth: 2,
+                                order: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        plugins: { 
+                            legend: { 
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            if (context.dataset.yAxisID === 'y1') {
+                                                label += context.parsed.y.toFixed(1) + '%';
+                                            } else {
+                                                label += CURRENCY + context.parsed.y.toFixed(2);
+                                            }
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: { 
+                                beginAtZero: true, 
+                                position: 'left', 
+                                title: { 
+                                    display: true, 
+                                    text: `Revenue (${CURRENCY})` 
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return CURRENCY + value.toFixed(0);
+                                    }
+                                }
+                            },
+                            y1: {
+                                beginAtZero: true,
+                                position: 'right',
+                                grid: { display: false },
+                                title: { 
+                                    display: true, 
+                                    text: 'Margin (%)' 
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return value.toFixed(1) + '%';
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-            }));
+                };
+            });
         };
 
         const initSalesChart = () => {
@@ -215,14 +295,36 @@ document.addEventListener('DOMContentLoaded', () => {
                         borderColor: "#198754",
                         backgroundColor: "rgba(25, 135, 84, 0.1)",
                         fill: true,
-                        tension: 0.4
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointBackgroundColor: "#198754",
+                        pointBorderColor: "#fff",
+                        pointBorderWidth: 2
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true } }
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return CURRENCY + context.parsed.y.toFixed(2);
+                                }
+                            }
+                        }
+                    },
+                    scales: { 
+                        y: { 
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return CURRENCY + value.toFixed(0);
+                                }
+                            }
+                        } 
+                    }
                 }
             }));
         };

@@ -1,5 +1,5 @@
 # ========================================
-# BizTrack PRO - Requirements with AI/ML
+# BizTrack PRO - Complete Requirements
 # ========================================
 
 # Core Framework
@@ -9,6 +9,10 @@ Werkzeug==3.0.0
 # Flask Extensions
 Flask-WTF==1.2.1
 Flask-Limiter==3.5.0
+Flask-Login==0.6.3
+
+# Form Validation
+WTForms==3.1.1
 
 # Utilities
 colorama>=0.4.6
@@ -16,23 +20,25 @@ tabulate>=0.9.0
 reportlab>=4.0
 python-dotenv==1.0.0
 
-# AI & Data Scraping
-requests>=2.0.0
-beautifulsoup4>=4.0.0
+# AI & Data Science
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+pandas>=2.1.0
+statsmodels>=0.14.0
+dateparser>=1.1.8
+lxml>=4.9.3
 
 # Database (optional upgrade)
 SQLAlchemy>=2.0.0
 alembic>=1.12.0
 
 # Deployment
-gunicorn>=21.2.0
+waitress>=2.1.0
 redis>=5.0.0
 
 # Testing
 pytest>=7.4.0
 pytest-cov>=4.1.0
-
-dateparser>=1.1.8
 
 # Linting
 flake8>=7.0.0

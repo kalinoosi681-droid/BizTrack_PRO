@@ -1,24 +1,30 @@
 # run.py
-from biztrack import create_app
-from biztrack.biztrack_db import init_db, seed_default_data, migrate_schema
-from dotenv import load_dotenv
 import os
+from biztrack import create_app
 
-# Load environment variables from .env file
-load_dotenv()
+def create_flask_app():
+    """
+    Creates and configures the Flask application using the factory.
+    This is the primary entry point for running the web app.
+    """
+    config_name = os.environ.get('FLASK_ENV', 'development')
+    app = create_app(config_name)
+    return app
 
-config_name = os.environ.get('FLASK_ENV', 'development')
-app = create_app(config_name)
+# Create the app instance
+app = create_flask_app()
 
-# Initialize database within the application context
-with app.app_context():
-    init_db()
-    seed_default_data()
-    migrate_schema()
-
-if __name__ == "__main__":
-    if config_name == 'production':
-        print("⚠️  For production, use: gunicorn -w 4 -b 0.0.0.0:5000 run:app")
-        print("Running development server...")
+if __name__ == '__main__':
+    # Run the development server
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
     
-    app.run(debug=(config_name == 'development'), port=5000)
+    print(f"🚀 Starting BizTrack PRO on http://localhost:{port}")
+    print(f"📊 Debug mode: {debug}")
+    
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=debug,
+        use_reloader=debug
+    )

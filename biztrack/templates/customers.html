@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 {% block title %}Customer Management{% endblock %}
 {% block content %}
@@ -11,12 +10,13 @@
   <div class="col-12">
     <div class="card shadow-sm">
       <div class="card-body">
-        <!-- UI/UX Refinement: Improved search bar appearance -->
-        <div class="input-group input-group-lg position-relative">
-          <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search"></i></span>
-          <input id="customer_search" type="text" class="form-control border-start-0"
-                 placeholder="Search to populate the update & delete forms..." 
-                 autocomplete="off">
+        <div class="position-relative">
+          <div class="input-group input-group-lg">
+            <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search"></i></span>
+            <input id="customer_search" type="text" class="form-control border-start-0"
+                   placeholder="Search to populate the update & delete forms..." 
+                   autocomplete="off">
+          </div>
           <div id="customer_suggest" class="dropdown-menu w-100" style="max-height: 400px; overflow-y: auto;"></div>
         </div>
       </div>
@@ -135,7 +135,7 @@
             </td>
             <td>{{ c.phone or 'N/A' }}</td>
             <td>{{ c.email or 'N/A' }}</td>
-            <td class="text-success fw-bold">${{ "%.2f"|format(c.total_spend|float) }}</td>
+            <td class="text-success fw-bold">M{{ "%.2f"|format(c.total_spend|float) }}</td>
             <td>
               {% if c.last_purchase %}
                 {{ c.last_purchase.split(' ')[0] }}
@@ -168,22 +168,17 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // --- ADVANCED UPGRADE: Unified form population function ---
+    // FIXED: Unified form population function
     function populateForms(customerData) {
-        // Populate Update Form
         document.getElementById('update_customer_id').value = customerData.id || '';
         document.getElementById('update_customer_name').value = customerData.name || '';
         document.getElementById('update_customer_phone').value = customerData.phone || '';
         document.getElementById('update_customer_email').value = customerData.email || '';
-
-        // Populate Delete Form
         document.getElementById('delete_customer_id').value = customerData.id || '';
-
-        // Scroll to top to make the forms visible
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // --- Event Listener for Edit Buttons in the table ---
+    // Event Listener for Edit Buttons in the table
     document.querySelectorAll('.edit-customer-btn').forEach(button => {
         button.addEventListener('click', function() {
             const customerData = {
@@ -196,7 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // --- CRITICAL FIX: Calculate and display "days ago" dynamically ---
+    // FIXED: Calculate and display "days ago" dynamically
     document.querySelectorAll('[data-last-purchase]').forEach(el => {
         const lastPurchaseDate = new Date(el.dataset.lastPurchase);
         const daysAgo = Math.round((new Date() - lastPurchaseDate) / (1000 * 60 * 60 * 24));
