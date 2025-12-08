@@ -106,7 +106,7 @@ Follow these steps to get BizTrack PRO running on your local machine.
 
 1.  **Start the Flask server:**
     ```sh
-    flask run
+    python run.py
     ```
 
 2.  **Access the application:**
