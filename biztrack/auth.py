@@ -42,7 +42,7 @@ def setup_admin_if_needed():
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
+        return redirect(url_for('main.index'))
 
     form = LoginForm()
     if form.validate_on_submit():
@@ -67,7 +67,7 @@ def login():
             # Use Flask-Login to manage the session
             login_user(user, remember=remember)
             flash("Login successful!", "success")
-            return redirect(url_for("main.dashboard"))
+            return redirect(url_for("main.index"))
         else:
             # Handle failed login attempt
             if user_data:

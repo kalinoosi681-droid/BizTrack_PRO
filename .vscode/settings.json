@@ -1,0 +1,7 @@
+{
+    "python.testing.pytestArgs": [
+        "biztrack"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+}

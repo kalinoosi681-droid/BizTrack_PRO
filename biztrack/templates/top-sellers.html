@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Top Sellers{% endblock %}
+
+<!-- ADDED: Load Chart.js -->
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="page-title mb-0"><i class="fas fa-crown me-2 text-warning"></i>Top Selling Products</h1>
@@ -53,6 +59,20 @@
 
 {% block scripts %}
 <script>
+const CURRENCY = 'M'; // Lesotho Maloti
+
+// Helper function for fetching JSON
+async function fetchJSON(url) {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+    } catch (error) {
+        console.error('Fetch error:', error);
+        return null;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   const limitSelect = document.getElementById('limitSelect');
   const tableBody = document.getElementById('top-sellers-body');
@@ -73,8 +93,8 @@ document.addEventListener('DOMContentLoaded', function() {
       tableBody.innerHTML = data.map((p, index) => `
         <tr>
           <td><span class="badge bg-secondary">${index + 1}</span></td>
-          <td><a href="/product/${p.id}">${p.name}</a></td>
-          <td class="fw-bold text-success">M${p.revenue.toFixed(2)}</td>
+          <td><a href="/product/${p.id}" class="text-decoration-none">${p.name}</a></td>
+          <td class="fw-bold text-success">${CURRENCY}${p.revenue.toFixed(2)}</td>
         </tr>
       `).join('');
     } else {
@@ -91,11 +111,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
     topSellersChart = new Chart(chartCanvas.getContext('2d'), {
       type: 'bar',
-      data: { labels: productNames, datasets: [{ label: "Revenue (M)", data: revenues, backgroundColor: "#0d6efd", borderRadius: 5 }] },
+      data: { 
+        labels: productNames, 
+        datasets: [{ 
+          label: `Revenue (${CURRENCY})`, 
+          data: revenues, 
+          backgroundColor: "#0d6efd", 
+          borderRadius: 5 
+        }] 
+      },
       options: {
-        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: context => "M" + context.formattedValue } } },
-        scales: { x: { beginAtZero: true, ticks: { callback: value => "M" + value } } }
+        indexAxis: 'y', 
+        responsive: true, 
+        maintainAspectRatio: false,
+        plugins: { 
+          legend: { display: false }, 
+          tooltip: { 
+            callbacks: { 
+              label: context => `${CURRENCY}${context.parsed.x.toFixed(2)}` 
+            } 
+          } 
+        },
+        scales: { 
+          x: { 
+            beginAtZero: true, 
+            ticks: { 
+              callback: value => `${CURRENCY}${value.toFixed(0)}` 
+            } 
+          } 
+        }
       }
     });
   }
@@ -107,23 +151,5 @@ document.addEventListener('DOMContentLoaded', function() {
   // Initial load
   fetchDataAndRender(limitSelect.value);
 });
-</script>
-{% endblock %}
-            }
-          }
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            callback: function(value) {
-              return "$" + value;
-            }
-          }
-        }
-      }
-    }
-  });
 </script>
 {% endblock %}

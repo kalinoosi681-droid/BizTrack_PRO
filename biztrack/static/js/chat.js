@@ -1,236 +1,282 @@
-// ========================================
-// ENHANCED AI CHAT WIDGET with Lesotho Intelligence
-// ========================================
-document.addEventListener('DOMContentLoaded', function() {
-    const CURRENCY = 'M'; // Lesotho Maloti
+// ==============================================================
+// FIXED: AI Chat Widget with Lesotho Intelligence
+// ==============================================================
+class AIChat {
+    constructor(containerId, options = {}) {
+        this.container = document.getElementById(containerId);
+        this.conversationId = options.conversationId || null;
+        this.apiBase = options.apiBase || '/api/ai';
+        this.onMessage = options.onMessage || null;
+        
+        this.init();
+    }
     
-    const toggleButton = document.getElementById('ai-chat-toggle-btn');
-    const chatWidget = document.getElementById('ai-chat-widget');
-    const clearButton = document.getElementById('ai-chat-clear-btn');
-    const closeButton = document.getElementById('ai-chat-close-btn');
-    const chatMessages = document.getElementById('ai-chat-messages');
-    const chatForm = document.getElementById('ai-chat-form');
-    const chatInput = document.getElementById('ai-chat-input');
-    const submitButton = document.getElementById('ai-chat-submit-btn');
-    const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
-
-    if (!toggleButton || !chatWidget || !chatForm || !clearButton) return;
-
-    const suggestionChips = [
-        "How can I grow my business?",
-        "Show low stock items",
-        "Top customers",
-        "Today's sales report",
-        "Business advice",
-        "Improve my margins"
-    ];
-
-    // Enhanced toggle with smooth animation
-    toggleButton.addEventListener('click', () => {
-        const isHidden = chatWidget.classList.toggle('hidden');
+    init() {
+        this.attachEventListeners();
+        this.loadConversationHistory();
+    }
+    
+    attachEventListeners() {
+        const sendBtn = document.getElementById('ai-chat-send-btn');
+        const input = document.getElementById('ai-chat-input');
+        const voiceBtn = document.getElementById('ai-chat-voice-btn');
+        const form = document.getElementById('ai-chat-form');
         
-        if (!isHidden) {
-            chatInput.focus();
-            
-            // Show welcome message and suggestions if chat is empty
-            if (chatMessages.children.length === 0) {
-                addChatMessage('ai', `
-                    <div class="welcome-message">
-                        <div class="mb-3">
-                            <i class="bi bi-robot" style="font-size: 2.5rem; color: #667eea;"></i>
-                        </div>
-                        <h5 class="fw-bold">Dumela! 👋</h5>
-                        <p class="mb-0">I'm your AI business assistant, powered by Lesotho market intelligence.</p>
-                        <p class="text-muted small mt-2">How can I help your business thrive today?</p>
-                    </div>
-                `);
-                showSuggestionChips();
-            }
+        // CRITICAL FIX: Prevent form submission
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.sendMessage();
+                return false;
+            });
         }
         
-        // Animate toggle button
-        toggleButton.style.transform = isHidden ? 'scale(1)' : 'scale(0.9)';
-        setTimeout(() => {
-            toggleButton.style.transform = 'scale(1)';
-        }, 200);
-    });
-
-    closeButton.addEventListener('click', () => {
-        chatWidget.classList.add('hidden');
-    });
-
-    // Clear chat with confirmation for non-empty chats
-    clearButton.addEventListener('click', () => {
-        if (chatMessages.children.length > 0) {
-            if (!confirm('Clear chat history?')) return;
+        if (sendBtn) {
+            sendBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.sendMessage();
+                return false;
+            });
         }
         
-        chatMessages.innerHTML = '';
+        if (input) {
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.sendMessage();
+                    return false;
+                }
+            });
+        }
         
-        // Show welcome message again
-        addChatMessage('ai', `
-            <div class="welcome-message">
-                <div class="mb-3">
-                    <i class="bi bi-robot" style="font-size: 2.5rem; color: #667eea;"></i>
-                </div>
-                <h5 class="fw-bold">Ready to assist! 🚀</h5>
-                <p class="text-muted small mb-0">What would you like to know?</p>
-            </div>
-        `);
-        showSuggestionChips();
-    });
-
-    function showSuggestionChips() {
-        const chipsContainer = document.createElement('div');
-        chipsContainer.className = 'chat-suggestions p-2';
-        chipsContainer.innerHTML = '<small class="text-muted d-block mb-2">Try asking:</small>';
+        if (voiceBtn) {
+            voiceBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.startVoiceInput();
+            });
+        }
+    }
+    
+    async sendMessage() {
+        const input = document.getElementById('ai-chat-input');
+        const message = input.value.trim();
         
-        suggestionChips.forEach(text => {
-            const chip = document.createElement('button');
-            chip.className = 'suggestion-chip btn btn-sm btn-outline-primary m-1';
-            chip.style.borderRadius = '1rem';
-            chip.style.fontSize = '0.8rem';
-            chip.innerHTML = `<i class="bi bi-lightning-charge-fill me-1"></i>${text}`;
-            chip.onclick = () => {
-                chatInput.value = text;
-                chatForm.dispatchEvent(new Event('submit', { cancelable: true }));
-            };
-            chipsContainer.appendChild(chip);
-        });
+        if (!message) {
+            console.warn('Empty message, ignoring');
+            return;
+        }
         
-        chatMessages.appendChild(chipsContainer);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        console.log('Sending message:', message);
+        
+        // Add user message
+        this.addMessage(message, 'user');
+        input.value = '';
+        
+        // Show typing
+        this.showTyping(true);
+        
+        try {
+            await this.getAIResponse(message);
+        } catch (error) {
+            console.error('Chat error:', error);
+            this.addMessage('Sorry, I encountered an error. Please try again.', 'bot');
+        } finally {
+            this.showTyping(false);
+        }
     }
 
-    chatForm.addEventListener('submit', async function(event) {
-        event.preventDefault();
-        const query = chatInput.value.trim();
-        if (!query) return;
-
-        // Add user message
-        addChatMessage('user', escapeHtml(query));
-        chatInput.value = '';
-        chatInput.disabled = true;
-        submitButton.disabled = true;
-
-        // Show typing indicator
-        const typingId = addChatMessage('ai', `
-            <div class="typing-indicator">
-                <span></span><span></span><span></span>
-            </div>
-        `);
-
-        // Clear suggestions on first real message
-        const suggestions = chatMessages.querySelector('.chat-suggestions');
-        if (suggestions) {
-            suggestions.remove();
-        }
-
+    async getAIResponse(message) {
+        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
+        
+        console.log('Fetching AI response...');
+        
         try {
-            const csrfToken = csrfTokenInput.value;
-            const response = await fetch('/api/ai/chat', {
+            const response = await fetch(`${this.apiBase}/chat`, {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
+                    'X-CSRFToken': csrfToken || ''
                 },
-                body: JSON.stringify({ query: query })
+                body: JSON.stringify({
+                    query: message,
+                    conversation_id: this.conversationId,
+                    stream: false
+                })
             });
-
-            // Remove typing indicator
-            const typingElement = document.getElementById(typingId);
-            if (typingElement) typingElement.remove();
-
-            if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+            
+            console.log('Response status:', response.status);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API Error:', errorText);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
 
             const data = await response.json();
+            console.log('AI Response data:', data);
             
-            // Process response to ensure Maloti currency
-            let aiResponse = data.response || 'Sorry, I could not understand that.';
-            aiResponse = aiResponse.replace(/\$(\d+\.?\d*)/g, `${CURRENCY}$1`);
-            
-            addChatMessage('ai', aiResponse);
-
-        } catch (error) {
-            console.error('AI Chat Error:', error);
-            
-            // Remove typing indicator
-            const typingElement = document.getElementById(typingId);
-            if (typingElement) typingElement.remove();
-            
-            addChatMessage('ai', `
-                <div class="alert alert-danger mb-0" role="alert">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    <strong>Connection Error</strong><br>
-                    I couldn't connect to the AI service. Please check your internet connection and try again.
-                </div>
-            `);
-        } finally {
-            chatInput.disabled = false;
-            submitButton.disabled = false;
-            chatInput.focus();
-        }
-    });
-
-    function addChatMessage(sender, message) {
-        const messageId = 'msg-' + Date.now();
-        const messageElement = document.createElement('div');
-        messageElement.id = messageId;
-        messageElement.classList.add('chat-message', `chat-message-${sender}`);
-        
-        if (sender === 'user') {
-            messageElement.innerHTML = `
-                <div class="d-flex justify-content-end mb-2">
-                    <div class="chat-bubble user-bubble">
-                        ${message}
-                    </div>
-                </div>
-            `;
-        } else {
-            messageElement.innerHTML = `
-                <div class="d-flex justify-content-start mb-2">
-                    <div class="chat-bubble ai-bubble">
-                        ${message}
-                    </div>
-                </div>
-            `;
-        }
-        
-        chatMessages.appendChild(messageElement);
-        
-        // Smooth scroll to bottom
-        chatMessages.scrollTo({
-            top: chatMessages.scrollHeight,
-            behavior: 'smooth'
-        });
-        
-        return messageId;
-    }
-
-    // Utility function to escape HTML
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    // Add keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        // Ctrl/Cmd + K to open chat
-        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-            e.preventDefault();
-            if (chatWidget.classList.contains('hidden')) {
-                toggleButton.click();
+            if (data.response) {
+                this.addMessage(data.response, 'bot');
+            } else if (data.error) {
+                this.addMessage(`Error: ${data.error}`, 'bot');
             } else {
-                chatInput.focus();
+                this.addMessage("No response received.", 'bot');
             }
+            
+        } catch (error) {
+            console.error('Chat API error:', error);
+            throw error;
+        }
+    }
+
+    addMessage(text, sender) {
+        const messagesContainer = document.getElementById('ai-chat-messages');
+        
+        if (!messagesContainer) {
+            console.error('Chat messages container not found!');
+            return null;
         }
         
-        // Escape to close chat
-        if (e.key === 'Escape' && !chatWidget.classList.contains('hidden')) {
-            closeButton.click();
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message-${sender}`;
+        
+        const bubble = document.createElement('div');
+        bubble.className = `chat-bubble ${sender === 'user' ? 'user-bubble' : 'ai-bubble'}`;
+        bubble.innerHTML = this.formatMessage(text);
+        
+        messageDiv.appendChild(bubble);
+        messagesContainer.appendChild(messageDiv);
+        this.scrollToBottom();
+    }
+    
+    formatMessage(text) {
+        // Basic markdown-like formatting
+        text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        text = text.replace(/\n/g, '<br>');
+        return text;
+    }
+    
+    showTyping(show) {
+        let typingIndicator = document.getElementById('ai-typing-indicator');
+        
+        if (show && !typingIndicator) {
+            const messagesContainer = document.getElementById('ai-chat-messages');
+            typingIndicator = document.createElement('div');
+            typingIndicator.id = 'ai-typing-indicator';
+            typingIndicator.className = 'chat-message-ai';
+            typingIndicator.innerHTML = `
+                <div class="chat-bubble ai-bubble">
+                    <div class="typing-indicator">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            `;
+            messagesContainer.appendChild(typingIndicator);
+            this.scrollToBottom();
+        } else if (!show && typingIndicator) {
+            typingIndicator.remove();
         }
-    });
+    }
+    
+    scrollToBottom() {
+        const messagesContainer = document.getElementById('ai-chat-messages');
+        if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    }
+    
+    clearMessages() {
+        const messagesContainer = document.getElementById('ai-chat-messages');
+        if (messagesContainer) {
+            messagesContainer.innerHTML = '';
+        }
+    }
+    
+    async loadConversationHistory() {
+        if (!this.conversationId) return;
+        
+        try {
+            const response = await fetch(`${this.apiBase}/conversation/${this.conversationId}`);
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            
+            if (data.history && Array.isArray(data.history)) {
+                data.history.forEach(turn => {
+                    this.addMessage(turn.user_message, 'user');
+                    this.addMessage(turn.assistant_message, 'bot');
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load conversation:', error);
+        }
+    }
+    
+    startVoiceInput() {
+        if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
+            alert('Voice input not supported in your browser. Please use Chrome.');
+            return;
+        }
+        
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        
+        const voiceBtn = document.getElementById('ai-chat-voice-btn');
+        const input = document.getElementById('ai-chat-input');
+        
+        recognition.lang = 'en-US';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        
+        recognition.onstart = () => {
+            if (voiceBtn) {
+                voiceBtn.innerHTML = '<i class="fas fa-stop-circle text-danger"></i>';
+                voiceBtn.classList.add('recording');
+            }
+        };
+        
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            if (input) {
+                input.value = transcript;
+                setTimeout(() => this.sendMessage(), 300);
+            }
+        };
+        
+        recognition.onend = () => {
+            if (voiceBtn) {
+                voiceBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+                voiceBtn.classList.remove('recording');
+            }
+        };
+        
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            if (voiceBtn) {
+                voiceBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+                voiceBtn.classList.remove('recording');
+            }
+            alert(`Voice recognition error: ${event.error}`);
+        };
+        
+        recognition.start();
+    }
+}
 
-    console.log('✅ AI Chat Widget initialized with Lesotho market intelligence');
+// Initialize chat when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('ai-chat-widget')) {
+        console.log('✅ Initializing AI Chat widget...');
+        window.aiChat = new AIChat('ai-chat-widget', {
+            apiBase: '/api/ai'
+        });
+        console.log('✅ AI Chat initialized successfully');
+    }
 });
+
+console.log('✅ Chat.js loaded successfully');

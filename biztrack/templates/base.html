@@ -3,46 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Advanced Upgrade: Content Security Policy for enhanced security -->
-    <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self'; 
-        script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; 
-        style-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com 'unsafe-inline'; 
-        font-src 'self' https://cdnjs.cloudflare.com;
-        img-src 'self' data:;
-        connect-src 'self';
-        frame-ancestors 'none';
-        form-action 'self';
-        base-uri 'self';
-    ">
     <title>{% block title %}Dashboard{% endblock %} - BizTrack PRO</title>
-    
-    <!-- Advanced Upgrade: Preconnect to CDNs for faster asset loading -->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 
-    <!-- Bootstrap CSS for styling -->
+    <!-- Chart.js (global) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    {% block head_extra %}{% endblock %}
+    
+    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <!-- Theme Loader Script -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <!-- Theme Loader Script (MUST BE IN HEAD) -->
     <script>
-        // Load theme from localStorage and set it on the HTML element before the page loads
-        (function() { const theme = localStorage.getItem('theme') || 'dark'; document.documentElement.setAttribute('data-bs-theme', theme); })();
+        (function() { 
+            const theme = localStorage.getItem('theme') || 'dark'; 
+            document.documentElement.setAttribute('data-bs-theme', theme); 
+        })();
     </script>
-    {% block head_extra %}{% endblock %}
     <style>
-        /* ========================================
-           AI CHAT WIDGET - ADVANCED UPGRADE
-           ======================================== */
+        /* AI CHAT WIDGET */
         #ai-chat-toggle-btn {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            z-index: 1055; /* Higher than chat widget */
+            z-index: 1055;
             transition: transform 0.3s ease-in-out;
         }
 
@@ -81,7 +70,62 @@
             padding: 1rem;
         }
 
-        /* Responsive adjustments for smaller screens */
+        /* Chat bubbles */
+        .chat-bubble {
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        
+        .user-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-left: auto;
+        }
+        
+        .ai-bubble {
+            background: #f8f9fa;
+            color: #212529;
+            border: 1px solid #dee2e6;
+        }
+        
+        .chat-message-user {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 0.75rem;
+        }
+        
+        .chat-message-ai {
+            display: flex;
+            justify-content: flex-start;
+            margin-bottom: 0.75rem;
+        }
+        
+        /* Typing indicator */
+        .typing-indicator {
+            display: inline-flex;
+            gap: 4px;
+            padding: 1rem;
+        }
+        
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #6c757d;
+            animation: typing 1.4s infinite;
+        }
+        
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        /* Responsive */
         @media (max-width: 768px) {
             #ai-chat-widget {
                 width: 100%;
@@ -99,22 +143,62 @@
     <header class="container mt-4">
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark rounded shadow-sm">
             <div class="container-fluid">
-                <a class="navbar-brand fw-bold" href="{{ url_for('main.dashboard') }}"><i class="fas fa-bolt me-2"></i>BizTrack PRO</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-nav" aria-controls="main-nav" aria-expanded="false" aria-label="Toggle navigation">
+                <a class="navbar-brand fw-bold" href="{{ url_for('main.index') }}">
+                    <i class="fas fa-bolt me-2"></i>BizTrack PRO
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-nav">
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <div class="collapse navbar-collapse" id="main-nav">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item"><a class="nav-link {% if request.path == url_for('main.dashboard') %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
-                        <li class="nav-item"><a class="nav-link {% if 'product' in request.path %}active{% endif %}" href="{{ url_for('main.products') }}">Products</a></li>
-                        <li class="nav-item"><a class="nav-link {% if 'customer' in request.path %}active{% endif %}" href="{{ url_for('main.customers') }}">Customers</a></li>
-                        <li class="nav-item"><a class="nav-link {% if 'invoice' in request.path %}active{% endif %}" href="{{ url_for('main.invoices') }}">Invoices</a></li>
-                        <li class="nav-item"><a class="nav-link {% if 'payroll' in request.path %}active{% endif %}" href="{{ url_for('main.payrolls') }}">Payroll</a></li>
-                        <li class="nav-item"><a class="nav-link {% if 'ai-insights' in request.path %}active{% endif %}" href="{{ url_for('main.ai_insights') }}">AI Insights</a></li>
-                        <li class="nav-item"><a class="nav-link {% if 'utils' in request.path %}active{% endif %}" href="{{ url_for('main.utils') }}">Utilities</a></li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.path == url_for('main.index') %}active{% endif %}" 
+                               href="{{ url_for('main.index') }}">Dashboard</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'product' in request.path %}active{% endif %}" 
+                               href="{{ url_for('main.products') }}">Products</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'customer' in request.path %}active{% endif %}" 
+                               href="{{ url_for('main.customers') }}">Customers</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'invoice' in request.path %}active{% endif %}" 
+                               href="{{ url_for('main.invoices') }}">Invoices</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'payroll' in request.path %}active{% endif %}" 
+                               href="{{ url_for('main.payrolls') }}">Payroll</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'ai-insights' in request.path %}active{% endif %}" 
+                               href="{{ url_for('main.ai_insights') }}">AI Insights</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'utils' in request.path %}active{% endif %}" 
+                               href="{{ url_for('main.utils') }}">Utilities</a>
+                        </li>
                     </ul>
+                    <!-- Global search (available on all pages) -->
+                    <div class="d-flex me-3 position-relative" style="min-width: 300px;">
+                        <div class="input-group input-group-sm w-100">
+                            <span class="input-group-text bg-transparent border-end-0">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input id="global_search" class="form-control border-start-0 ps-0" placeholder="Search products, customers, invoices..." autocomplete="off">
+                        </div>
+                        <div id="global_results" class="list-group position-absolute w-100 mt-1" style="z-index: 1056; max-height: 360px; overflow-y: auto; box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);"></div>
+                    </div>
                     <div class="d-flex align-items-center">
-                        <div class="btn-group me-2" role="group"><button type="button" class="btn btn-outline-secondary btn-sm" id="theme-light-btn" title="Switch to light mode"><i class="fas fa-sun"></i></button><button type="button" class="btn btn-outline-secondary btn-sm" id="theme-dark-btn" title="Switch to dark mode"><i class="fas fa-moon"></i></button></div>
+                        <div class="btn-group me-2" role="group">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="theme-light-btn">
+                                <i class="fas fa-sun"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm active" id="theme-dark-btn">
+                                <i class="fas fa-moon"></i>
+                            </button>
+                        </div>
                         <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
                     </div>
                 </div>
@@ -128,7 +212,7 @@
                 {% for category, message in messages %}
                     <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
                         {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
             {% endif %}
@@ -136,47 +220,80 @@
         
         {% block content %}{% endblock %}
     </main>
+    <footer class="container mt-4 mb-4 text-center text-muted">
+        <small>&copy; {{ current_year }} BizTrack PRO. All rights reserved.</small>
+    </footer>
 
-    <!-- AI Chat Widget -->
-    <button id="ai-chat-toggle-btn" class="btn btn-primary btn-lg rounded-circle shadow-lg" aria-label="Toggle AI Chat">
-        <i class="fas fa-robot"></i>
-    </button>
+<!-- AI Chat Widget -->
+<button id="ai-chat-toggle-btn" class="btn btn-primary btn-lg rounded-circle shadow-lg">
+    <i class="fas fa-robot"></i>
+</button>
 
-    <div id="ai-chat-widget" class="card shadow-lg hidden">
-        <div id="ai-chat-header" class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h6 class="mb-0"><i class="fas fa-robot me-2"></i>AI Assistant</h6>
-            <div>
-                <button id="ai-chat-clear-btn" class="btn btn-sm btn-outline-light me-2" title="Clear Chat"><i class="fas fa-eraser"></i></button>
-                <button id="ai-chat-close-btn" class="btn-close btn-close-white"></button>
-            </div>
-        </div>
-        <div id="ai-chat-messages" class="card-body">
-        </div>
-        <div id="ai-chat-input-container" class="card-footer">
-            <form id="ai-chat-form" class="d-flex">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="text" id="ai-chat-input" class="form-control" placeholder="Ask the AI..." autocomplete="off" required>
-                <button type="submit" id="ai-chat-submit-btn" class="btn btn-primary ms-2" aria-label="Send Message">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
-            </form>
+<div id="ai-chat-widget" class="card shadow-lg hidden">
+    <div id="ai-chat-header" class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-robot me-2"></i>AI Assistant</h6>
+        <div>
+            <button id="ai-chat-clear-btn" class="btn btn-sm btn-outline-light me-2" title="Clear Chat">
+                <i class="fas fa-eraser"></i>
+            </button>
+            <button id="ai-chat-close-btn" class="btn-close btn-close-white"></button>
         </div>
     </div>
+    <div id="ai-chat-messages" class="card-body bg-light"></div>
+    <div id="ai-chat-input-container" class="card-footer">
+        <form id="ai-chat-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="d-flex">
+                <input type="text" id="ai-chat-input" class="form-control" 
+                       placeholder="Ask the AI..." autocomplete="off">
+                <button type="button" id="ai-chat-voice-btn" class="btn btn-outline-primary ms-2" title="Voice Input">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button type="button" id="ai-chat-send-btn" class="btn btn-primary ms-2">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
-    <footer class="container text-center text-muted py-4">
-        <small>&copy; {{ datetime.now(timezone.utc).year }} BizTrack PRO. All Rights Reserved.</small>
-    </footer>
-    
-    <!-- JavaScript -->
-    <!-- html2pdf.js for client-side PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- Chart.js - Now loaded globally for all pages that need it -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Centralized scripts -->
+<!-- CRITICAL: Add this script AFTER the chat widget HTML -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleBtn = document.getElementById('ai-chat-toggle-btn');
+    const chatWidget = document.getElementById('ai-chat-widget');
+    const closeBtn = document.getElementById('ai-chat-close-btn');
+    const clearBtn = document.getElementById('ai-chat-clear-btn');
+
+    if (toggleBtn && chatWidget) {
+        toggleBtn.addEventListener('click', function() {
+            chatWidget.classList.toggle('hidden');
+        });
+    }
+
+    if (closeBtn && chatWidget) {
+        closeBtn.addEventListener('click', function() {
+            chatWidget.classList.add('hidden');
+        });
+    }
+
+    if (clearBtn && window.aiChat) {
+        clearBtn.addEventListener('click', function() {
+            if (confirm('Clear all chat messages?')) {
+                window.aiChat.clearMessages();
+            }
+        });
+    }
+});
+</script>
+     <!-- Bootstrap JS (bundle includes Popper) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" defer></script>
+    <!-- Global UI helpers & search/autocomplete -->
     <script src="{{ url_for('static', filename='js/auto.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+    <!-- CRITICAL: Chat must load AFTER auto.js -->
+    <script src="{{ url_for('static', filename='js/chat.js') }}">defer</script>
 
+    <!-- 4. Page-specific scripts -->
     {% block scripts %}{% endblock %}
 </body>
 </html>

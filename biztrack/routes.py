@@ -1,7 +1,7 @@
 # ========================================
 # ENHANCED routes.py - Real-Time Intelligence
 # ========================================
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, send_file
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, send_file, Response, stream_with_context
 from flask_login import login_required, current_user  # FIXED: Import from flask_login
 from biztrack.forms import (
     CustomerAddForm, CustomerDeleteForm, CustomerUpdateForm, ProductBulkUpdateForm,
@@ -9,6 +9,7 @@ from biztrack.forms import (
     InvoiceAddForm, InvoiceDeleteForm, InvoiceUpdateForm,
     PayrollAddForm, PayrollDeleteForm, PayrollUpdateForm
 )
+import json
 from .extensions import limiter, csrf
 from .biztrack_db import (
     get_top_sellers, execute_query, create_invoice_and_insert_sales,
@@ -23,9 +24,11 @@ from .biztrack_db import (
     record_sale, delete_sale, get_sale_details,
     execute_command, get_store_avg_7d_qty, get_product_7d_qty
 )
+from .email_utils import send_invoice_email
 import os
 from datetime import datetime
 import csv
+import requests # For Ollama
 from werkzeug.utils import secure_filename
 import logging
 
@@ -36,7 +39,10 @@ main = Blueprint("main", __name__)
 @main.route('/favicon.ico')
 def favicon():
     """Handles browser requests for the site favicon."""
-    return '', 204
+    favicon_path = os.path.join(main.root_path, 'static', 'favicon.ico')
+    if os.path.exists(favicon_path):
+        return send_file(favicon_path, mimetype='image/vnd.microsoft.icon')
+    return '', 204 # Return 'No Content' if favicon doesn't exist
 
 # ========================================
 # DASHBOARD - REAL-TIME ANALYTICS
@@ -44,7 +50,7 @@ def favicon():
 
 @main.route("/")
 @login_required
-def dashboard():
+def index():
     """Enhanced dashboard with real-time intelligence"""
     # Advanced Upgrade: Use a single, optimized query to fetch all KPIs at once.
     # This is much more performant than running multiple full-table queries.
@@ -131,11 +137,64 @@ def api_dashboard_realtime():
             "avg_transaction": round(float(today_metrics[2] or 0), 2) if today_metrics else 0
         },
         "hourly": [{
-            "hour": h[0],
-            "transactions": h[1],
-            "revenue": round(float(h[2] or 0), 2)
+            "hour": (h.get('hour') if isinstance(h, dict) else h[0]),
+            "transactions": (h.get('transactions') if isinstance(h, dict) else h[1]),
+            "revenue": round(float((h.get('revenue') if isinstance(h, dict) else h[2]) or 0), 2)
         } for h in (hourly_sales or [])]
     })
+
+# ========================================
+# AI CHATBOT (OLLAMA INTEGRATION)
+# ========================================
+
+@main.route("/api/ai/ollama-chat", methods=["POST"])
+@login_required
+@csrf.exempt # Exempt CSRF for API endpoint, can be secured differently if needed
+def ai_chat_stream_legacy():
+    """
+    Legacy streaming chat endpoint that directly proxies to Ollama.
+    This route was renamed to avoid colliding with the main AI blueprint
+    at `/api/ai/chat`. Newer AI endpoints live in `ai_routes.py`.
+    """
+    data = request.get_json()
+    query = data.get("query")
+    # conversation_id = data.get("conversation_id") # For future stateful conversations
+
+    if not query:
+        return jsonify({"error": "Query is required"}), 400
+
+    # This is a basic prompt. For better results, you can inject database schema,
+    # recent sales data, or specific context about the user's request.
+    prompt = f"""
+    You are BizBot, an expert business analyst for a retail store in Lesotho.
+    Analyze the user's query and provide a concise, data-driven, and actionable response.
+    Use Maloti (M) as the currency.
+    User Query: "{query}"
+    """
+
+    def generate_stream():
+        try:
+            # Payload for Ollama API
+            payload = {
+                "model": "llama3",  # CHANGE if you use a different model
+                "prompt": prompt,
+                "stream": True
+            }
+            
+            # Stream response from Ollama
+            response = requests.post("http://localhost:11434/api/generate", json=payload, stream=True)
+            response.raise_for_status() # Raise an exception for bad status codes
+
+            for chunk in response.iter_lines():
+                if chunk:
+                    json_chunk = json.loads(chunk)
+                    yield f"data: {json.dumps({'token': json_chunk.get('response', '')})}\n\n"
+        except requests.exceptions.ConnectionError:
+            yield f"data: {json.dumps({'error': 'Could not connect to Ollama AI service.'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': f'An unexpected error occurred: {str(e)}'})}\n\n"
+
+    return Response(stream_with_context(generate_stream()), mimetype="text/event-stream")
 # ... (keep existing dashboard API endpoints)
 @main.route("/api/dashboard/sales")
 @login_required
@@ -371,6 +430,8 @@ def products():
 @login_required
 def product_detail(pid):
     """Product detail page with sales history and threshold update."""
+    # ADDED: Import and instantiate the threshold form
+    from biztrack.forms import ProductThresholdUpdateForm
     threshold_form = ProductThresholdUpdateForm()
 
     # --- Performance Optimization: Fetch product details and performance in one query ---
@@ -400,14 +461,24 @@ def product_detail(pid):
         "perf_percent": row[6]
     }
     
-    # Get sale history
-    sale_history = get_product_sale_history(pid, days=30)
+    # CRITICAL FIX: Get sale history for the product
+    sale_history_rows = execute_query("""
+        SELECT date, qty, total_price FROM sales
+        WHERE product_id = ? AND date >= date('now', '-30 days')
+        ORDER BY date DESC;
+    """, (pid,), fetch=True)
+    
+    # Convert tuples to dictionaries for template use
+    sale_history = [
+        {"date": row[0], "qty": row[1], "total_price": row[2]}
+        for row in (sale_history_rows or [])
+    ]
     
     return render_template(
         "product_detail.html", 
         product=product, 
-        sale_history=sale_history, 
-        threshold_form=threshold_form)
+        sale_history=sale_history,
+        threshold_form=threshold_form) 
 
 @main.route("/product/<int:pid>/update-threshold", methods=["POST"])
 @login_required
@@ -729,6 +800,11 @@ def invoices():
                 invoice_id = create_invoice_and_insert_sales(customer_id, items)
                 
                 if invoice_id:
+                    # Update daily metrics after successful invoice creation
+                    try:
+                        compute_daily_store_metrics()
+                    except Exception as e:
+                        logger.warning(f"Failed to compute daily metrics: {e}")
                     flash(f"✅ Invoice #{invoice_id} created successfully", "success")
                 else:
                     flash("❌ Failed to create invoice. Check stock levels.", "danger")
@@ -773,12 +849,67 @@ def invoice_detail(iid):
     invoice = {
         "id": row[0], "invoice_number": row[1], "customer_id": row[2],
         "total": float(row[3] or 0), "date": row[4],
-        "customer_name": row[5] or "Unknown Customer" # Handle deleted customers
+        "customer_name": row[5] or "Unknown Customer",  "customer_email": row[6] or "", # Handle deleted customers
     }
     
     items = get_sale_details(iid)
     
     return render_template("invoice_detail.html", invoice=invoice, items=items)
+
+
+@main.route("/api/invoice/<int:iid>/email", methods=["POST"])
+@login_required
+def send_invoice_via_email(iid):
+    """API endpoint to send invoice via email"""
+    try:
+        # Get JSON data from request
+        data = request.get_json() or {}
+        recipient_email = data.get('email', '').strip()
+        
+        # Validate email
+        if not recipient_email:
+            return jsonify({"success": False, "message": "❌ Recipient email is required"}), 400
+        
+        # Fetch invoice data
+        invoice_row = execute_query(
+            """
+            SELECT i.id, i.invoice_number, i.customer_id, i.total, i.date, c.name as customer_name, c.email as customer_email
+            FROM invoices i
+            LEFT JOIN customers c ON i.customer_id = c.id
+            WHERE i.id = ?;
+            """,
+            (iid,),
+            fetchone=True
+        )
+        
+        if not invoice_row:
+            return jsonify({"success": False, "message": "❌ Invoice not found"}), 404
+        
+        # Build invoice data dict
+        invoice_data = {
+            "id": invoice_row[0],
+            "invoice_number": invoice_row[1],
+            "customer_id": invoice_row[2],
+            "total": float(invoice_row[3] or 0),
+            "date": invoice_row[4],
+            "customer_name": invoice_row[5] or "Unknown Customer",
+            "customer_email": invoice_row[6] or ""
+        }
+        
+        # Fetch line items
+        items = get_sale_details(iid)
+        
+        # Send email
+        success, message = send_invoice_email(recipient_email, invoice_data, items)
+        
+        if success:
+            return jsonify({"success": True, "message": message}), 200
+        else:
+            return jsonify({"success": False, "message": message}), 500
+            
+    except Exception as e:
+        logger.error(f"Error sending invoice email: {str(e)}")
+        return jsonify({"success": False, "message": f"❌ Error: {str(e)}"}), 500
 
 
 # ========================================
@@ -1033,3 +1164,8 @@ def routes_page():
 def ai_insights():
     """AI insights dashboard page"""
     return render_template("ai_insights.html")
+
+@main.route("/test")
+@login_required
+def test_page():
+    return render_template("test.html")

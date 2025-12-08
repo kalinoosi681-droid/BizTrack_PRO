@@ -465,7 +465,7 @@ async function fetchJSON(url, options = {}) {
         }
     
         suggestionBox.style.display = 'block';
-        suggestionBox.innerHTML = '<div class="text-muted"><i class="fas fa-robot fa-spin me-2"></i>AI analyzing Lesotho market data...</div>';
+        suggestionBox.innerHTML = '<div class="text-muted"><i class="fas fa-robot fa-spin me-2"></i>Analyzing Lesotho market data...</div>';
 
         const data = await fetchJSON('/api/ai/predict-product', {
             method: 'POST',
@@ -480,26 +480,21 @@ async function fetchJSON(url, options = {}) {
             suggestionBox.innerHTML = `
                 <div class="alert alert-success small p-3" style="animation: fadeIn 0.3s ease-out;">
                     <i class="fas fa-check-circle me-2"></i>
-                    <strong>🇱🇸 AI Suggestions Applied (Lesotho Market)</strong>
+                    <strong>🇱🇸 AI Analysis Complete (Lesotho Market)</strong>
                     <ul class="list-unstyled mb-0 mt-2 small">
                         <li>
                             <strong>Category:</strong> ${data.category.predicted} 
                             <span class="badge bg-success">${data.category.confidence}% confidence</span>
                         </li>
                         <li>
-                            <strong>Price:</strong> ${CURRENCY}${data.price.suggested_price} 
+                            <strong>Suggested Price:</strong> M${data.price.suggested_price} 
                             <small class="text-muted">(${data.price.reasoning})</small>
                         </li>
-                        ${data.price.market_avg ? `<li><strong>Market Avg:</strong> ${CURRENCY}${data.price.market_avg} (incl. 15% VAT)</li>` : ''}
-                        <li><strong>Stock:</strong> ${data.stock.recommended_qty} units</li>
-                        ${data.similar_products && data.similar_products.length > 0 ? `
-                            <li class="mt-2">
-                                <small class="text-muted">
-                                    <i class="fas fa-link me-1"></i>Similar: 
-                                    ${data.similar_products.map(p => p.name).join(', ')}
-                                </small>
-                            </li>
-                        ` : ''}
+                        ${data.price.market_avg ? `<li><strong>Market Average:</strong> M${data.price.market_avg}</li>` : ''}
+                        ${data.price.vat_applicable ? '<li><small class="text-info">✓ Includes 15% VAT</small></li>' : '<li><small class="text-warning">VAT-exempt product</small></li>'}
+                        ${data.price.seasonal_factor !== 1.0 ? `<li><small class="text-primary">📅 Seasonal adjustment applied (${(data.price.seasonal_factor * 100).toFixed(0)}%)</small></li>` : ''}
+                        <li><strong>Recommended Stock:</strong> ${data.stock.recommended_qty} units</li>
+                        <li class="mt-2"><small class="text-muted"><strong>Sources:</strong> ${data.price.sources.join(', ')}</small></li>
                     </ul>
                 </div>`;
         } else {

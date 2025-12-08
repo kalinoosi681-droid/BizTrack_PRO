@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+{% endblock %}
+
+
 {% block content %}
 
 <div class="dashboard-container">
@@ -7,27 +13,7 @@
     <i class="bi bi-graph-up-arrow me-2"></i>Real-Time Business Intelligence
   </h1>
 
-  <!-- Global Search Bar -->
-  <div class="row mb-4">
-    <div class="col-12">
-      <div class="card shadow-sm border-0">
-        <div class="card-body">
-          <div class="position-relative">
-            <div class="input-group input-group-lg">
-              <span class="input-group-text bg-transparent border-end-0">
-                <i class="bi bi-search"></i>
-              </span>
-              <input id="global_search" class="form-control border-start-0 ps-0" 
-                     placeholder="Search products, customers, invoices..." 
-                     autocomplete="off">
-            </div>
-            <div id="global_results" class="list-group position-absolute w-100 mt-1" 
-                 style="z-index: 1056; max-height: 400px; overflow-y: auto; box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Search is now available in the navbar for all pages -->
 
   <!-- REAL-TIME METRICS BOARD -->
   <div class="row g-4 mb-4">
@@ -338,21 +324,4 @@
 }
 </style>
 
-{% endblock %}
-
-{% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
-<script>
-// Add month revenue fetch
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    const response = await fetch('/api/dashboard/month-revenue');
-    const data = await response.json();
-    document.getElementById('monthRevenue').textContent = `M${data.revenue.toFixed(2)}`;
-  } catch (error) {
-    console.error('Failed to fetch month revenue:', error);
-  }
-});
-</script>
 {% endblock %}

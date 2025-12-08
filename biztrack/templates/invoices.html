@@ -76,7 +76,7 @@
         <div class="col-12">
           <div class="alert alert-info d-flex justify-content-between align-items-center">
             <span><i class="fas fa-calculator me-2"></i><strong>Total:</strong></span>
-            <span class="fs-4 fw-bold" id="totalPreview">$0.00</span>
+            <span class="fs-4 fw-bold" id="totalPreview">M0.00</span>
           </div>
         </div>
       </div>
@@ -149,7 +149,7 @@
                 {{ inv.customer_name or 'Walk-in Customer' }}
               </a>
             </td>
-            <td class="text-success fw-bold">${{ "%.2f"|format(inv.total) if inv.total else "0.00" }}</td>
+            <td class="text-success fw-bold">M{{ "%.2f"|format(inv.total) if inv.total else "0.00" }}</td>
             <td>{{ inv.date }}</td>
             <td>
               <a href="{{ url_for('main.invoice_detail', iid=inv.id) }}" class="btn btn-sm btn-outline-primary">

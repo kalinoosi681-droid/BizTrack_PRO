@@ -30,14 +30,17 @@ def get_connection(db_file: Optional[str] = None) -> sqlite3.Connection:
     """Get a database connection for the current application context."""
     # For testing with an in-memory database, we need a single, persistent connection
     # for the life of the app. We attach it to the app object itself.
-    if current_app.config.get('TESTING') and DB_FILE == ':memory:':
+    testing_db = current_app.config.get('DATABASE')
+    if current_app.config.get('TESTING') and (testing_db == ':memory:' or DB_FILE == ':memory:'):
         if not hasattr(current_app, 'sqlite_db_conn'):
+            # Use a single persistent in-memory connection for tests
             current_app.sqlite_db_conn = sqlite3.connect(":memory:", check_same_thread=False)
             current_app.sqlite_db_conn.execute("PRAGMA foreign_keys = ON;")
         return current_app.sqlite_db_conn
 
     if 'db_conn' not in g:
-        path = db_file or DB_FILE
+        # Prefer application-configured database path (set by create_app or tests)
+        path = db_file or current_app.config.get('DATABASE') or DB_FILE
         conn = sqlite3.connect(path, timeout=10, check_same_thread=False)
         conn.execute("PRAGMA foreign_keys = ON;")
         g.db_conn = conn
@@ -53,7 +56,7 @@ def close_connection(e=None) -> None:
         conn.close()
 
 def execute_query(query: str, params: Sequence = (), fetch: bool = False,
-                  fetchone: bool = False, commit: bool = False):
+                  fetchone: bool = False, commit: bool = False, _retry: bool = False):
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -74,9 +77,123 @@ def execute_query(query: str, params: Sequence = (), fetch: bool = False,
     except Exception as exc:
         logger.error("DB ERROR: %s | Params: %s", query, params)
         logger.exception(exc)
+        # If the database file is corrupted, attempt an automated repair and retry once.
+        try:
+            err_text = str(exc).lower()
+        except Exception:
+            err_text = ""
+        if (not _retry) and isinstance(exc, sqlite3.DatabaseError) and 'malformed' in err_text:
+            logger.warning("Detected malformed database image. Attempting repair and retry...")
+            try:
+                repair_db()
+                # Retry the query once after repair
+                return execute_query(query, params, fetch=fetch, fetchone=fetchone, commit=commit, _retry=True)
+            except Exception:
+                logger.exception("Automatic DB repair failed")
         if fetch or fetchone:
             return None if fetchone else []
         return None
+
+
+def repair_db() -> None:
+    """Attempt to recover from a corrupted SQLite database by backing up the file
+    and creating a fresh database initialized with schema and seed data.
+    This is a best-effort recovery used in development/testing.
+    """
+    try:
+        path = current_app.config.get('DATABASE') or DB_FILE
+    except Exception:
+        path = DB_FILE
+
+    # Don't attempt to repair in-memory DBs
+    if path == ':memory:':
+        logger.error('Cannot repair in-memory database')
+        return
+
+    try:
+        # Close any existing connections that may hold locks on the DB file
+        try:
+            # Close request-scoped connection
+            conn_obj = g.pop('db_conn', None)
+            if conn_obj:
+                try:
+                    conn_obj.close()
+                except Exception:
+                    pass
+
+            # Close persistent app-level in-memory connection if present
+            if hasattr(current_app, 'sqlite_db_conn'):
+                try:
+                    current_app.sqlite_db_conn.close()
+                except Exception:
+                    pass
+                try:
+                    delattr(current_app, 'sqlite_db_conn')
+                except Exception:
+                    pass
+        except Exception:
+            logger.warning('Failed to close existing DB connections before repair')
+
+        backup_dir = os.path.join(os.getcwd(), 'backups')
+        Path(backup_dir).mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_path = os.path.join(backup_dir, f"biztrack_db_malformed_{timestamp}.db")
+        try:
+            copy2(path, backup_path)
+            logger.info(f"Corrupted DB backed up to {backup_path}")
+        except Exception:
+            logger.warning(f"Failed to backup corrupted DB at {path}")
+
+        # Try to remove the corrupted DB file; on Windows it may be locked.
+        removed = False
+        try:
+            os.remove(path)
+            removed = True
+        except Exception:
+            logger.warning(f"Could not remove corrupted DB at {path}")
+
+        # If removal failed, try renaming/moving the original to backups with a different name
+        if not removed:
+            try:
+                moved_path = os.path.join(backup_dir, f"biztrack_db_malformed_locked_{timestamp}.db")
+                os.replace(path, moved_path)
+                logger.info(f"Moved locked corrupted DB to {moved_path}")
+                removed = True
+            except Exception:
+                logger.warning(f"Could not move locked DB at {path}; will create a new DB alongside it")
+
+        # If we couldn't remove/move the corrupted file, create a new DB file at a new path
+        new_path = path
+        if not removed:
+            new_path = f"{os.path.splitext(path)[0]}_repaired_{timestamp}.db"
+            logger.warning(f"Creating new database file at {new_path} to avoid locked corrupted file")
+            # Update app config and DB_FILE so subsequent connections use the new DB
+            try:
+                current_app.config['DATABASE'] = new_path
+                set_db_file(new_path)
+            except Exception:
+                logger.warning('Failed to update app DATABASE config; proceeding with new_path local create')
+
+        # Create a fresh DB and initialize schema + seed data
+        conn = sqlite3.connect(new_path, check_same_thread=False)
+        conn.close()
+
+        # Ensure any lingering request-scoped connection variable is cleared
+        try:
+            g.pop('db_conn', None)
+        except Exception:
+            pass
+
+        # Initialize schema and seed defaults using the new DB path
+        try:
+            init_db()
+            migrate_schema()
+            seed_default_data()
+            logger.info('Database repaired and reinitialized successfully')
+        except Exception:
+            logger.exception('Failed to initialize fresh database after repair')
+    except Exception:
+        logger.exception('Unexpected error during repair_db')
 
 # ============================
 # Schema Initialization
@@ -242,6 +359,14 @@ def migrate_schema() -> None:
                     ADD COLUMN low_stock_threshold INTEGER DEFAULT 10;
                 """)
                 logger.info("✅ Added low_stock_threshold to products")
+            
+            if 'description' not in products_cols:
+                logger.info("Adding description column to products table")
+                cur.execute("""
+                    ALTER TABLE products 
+                    ADD COLUMN description TEXT DEFAULT '';
+                """)
+                logger.info("✅ Added description to products")
             
             # Check if metrics tables exist, create if missing
             cur.execute("""
@@ -486,6 +611,27 @@ def seed_default_data() -> None:
             ("Blue Apron Towel", "Home", 5, 12.0),
             ("Notebook A5", "Stationery", 50, 1.5),
             ("Hand Sanitizer 500ml", "Health", 20, 4.5),
+            ("Boss", "Cigaretts", 100, 1.0),
+            ("Milk 500ml", "Food", 50, 12.5),
+            ("Milk 1litre", "Food", 40, 18.0),
+            ("Lucky Star Fish small", "Food", 24, 25.0),
+            ("Lucky star Medium", "Food", 20, 35.5),
+            ("Eggs Tray", "Food", 150, 50.0),
+            ("Egg", "Food", 150, 2.5),
+            ("Trust Condoms", "Health", 30, 10.0),
+            ("Go slows peri peri", "Snacks", 70, 8.0),
+            ("Go slows chutney", "Snacks", 70, 8.0),
+            ("Go slows Beef", "Snacks", 70, 8.0),
+            ("Go slows Cheese", "Snacks", 70, 8.0),
+            ("Go slows Chicken", "Snacks", 70, 8.0),
+            ("Likwankwara", "Biscuits", 800, 0.2),
+            ("Nik Naks Cheese", "Snacks", 100, 1.5),
+            ("Tastic Rice 1kg", "Food", 30, 20.0),
+            ("Tastic Rice 2kg", "Food", 30, 35.0),
+            ("Tastic Rice 5kg", "Food", 15, 105.0),
+            ("Chai Maize Meal 2kg", "Flour", 40, 25.0),
+            ("Chai Maize Meal 5kg", "Flour", 35, 60.0),
+            ("Chai Maize Meal 12.5kg", "Flour", 25, 110.0),
         ]
         conn = get_connection()
         cur = conn.cursor()
@@ -1196,9 +1342,13 @@ def get_product_sale_history(product_id: int, days: int = 30) -> list[dict]:
 
 def get_reorder_alerts(lead_time_days: int = 7, safety_stock_days: int = 3) -> list[dict]:
     """
-    Generates reorder alerts based on sales velocity.
-    - lead_time_days: How many days it takes for new stock to arrive.
-    - safety_stock_days: Extra buffer of stock.
+    Generates reorder alerts based on:
+    1. Sales velocity (if product has recent sales history)
+    2. Low stock threshold (explicit user-configured alert level)
+    
+    Alert triggers when:
+    - Current stock is below low_stock_threshold, OR
+    - Projected stock (considering sales velocity) will run out within lead_time + safety_stock days
     """
     query = """
         WITH product_sales_velocity AS (
@@ -1217,27 +1367,40 @@ def get_reorder_alerts(lead_time_days: int = 7, safety_stock_days: int = 3) -> l
             name,
             qty,
             daily_avg_sale,
-            (daily_avg_sale * (? + ?)) AS reorder_point -- lead_time + safety_stock
+            low_stock_threshold,
+            (CASE 
+                WHEN daily_avg_sale > 0 THEN daily_avg_sale * (? + ?)
+                ELSE low_stock_threshold
+            END) AS reorder_point
         FROM product_sales_velocity
-        WHERE qty < (daily_avg_sale * (? + ?)) AND daily_avg_sale > 0;
+        WHERE qty <= low_stock_threshold  -- Threshold-based trigger
+           OR (daily_avg_sale > 0 AND qty < (daily_avg_sale * (? + ?)))  -- Velocity-based trigger
+        ORDER BY qty ASC;
     """
     params = (lead_time_days, safety_stock_days, lead_time_days, safety_stock_days)
     rows = execute_query(query, params, fetch=True)
 
     alerts = []
     for row in rows:
-        product_id, name, current_stock, daily_avg, reorder_point = row
+        product_id, name, current_stock, daily_avg, threshold, reorder_point = row
         days_of_stock_left = current_stock / daily_avg if daily_avg > 0 else 999
         
+        # Determine urgency based on how soon stock runs out
         urgency = "low"
-        if days_of_stock_left <= safety_stock_days:
+        if current_stock <= threshold:
+            urgency = "critical" if current_stock <= threshold // 2 else "high"
+        elif days_of_stock_left <= safety_stock_days:
             urgency = "critical"
         elif days_of_stock_left <= lead_time_days:
             urgency = "high"
 
         alerts.append({
-            "product_id": product_id, "product_name": name, "current_stock": current_stock,
-            "reorder_qty": max(10, round(reorder_point * 1.5)), # Suggest reordering 1.5x the reorder point
-            "urgency": urgency, "recommendation": f"Stock may run out in ~{int(days_of_stock_left)} days."
+            "product_id": product_id, 
+            "product_name": name, 
+            "current_stock": current_stock,
+            "threshold": threshold,
+            "reorder_qty": max(10, round(reorder_point * 1.5)), 
+            "urgency": urgency, 
+            "recommendation": f"Stock below threshold. Days remaining: ~{int(days_of_stock_left)}" if daily_avg > 0 else f"Stock below threshold ({threshold})."
         })
-    return sorted(alerts, key=lambda x: (x['urgency'] != 'critical', x['urgency'] != 'high'))
+    return sorted(alerts, key=lambda x: (x['urgency'] != 'critical', x['urgency'] != 'high', x['current_stock']))

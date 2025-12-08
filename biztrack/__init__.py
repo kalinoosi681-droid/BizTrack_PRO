@@ -1,3 +1,6 @@
+# ========================================
+# FIXED: __init__.py - Add User ID to Request Context
+# ========================================
 import os
 from flask import Flask
 from datetime import datetime, timezone
@@ -23,24 +26,26 @@ def create_app(config_name='development'):
     
     # CSRF Configuration
     app.config['WTF_CSRF_ENABLED'] = True
-    app.config['WTF_CSRF_TIME_LIMIT'] = None  # No time limit for CSRF tokens
+    app.config['WTF_CSRF_TIME_LIMIT'] = None
     
     # Session configuration
-    app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+    app.config['SESSION_COOKIE_SECURE'] = False
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+    app.config['PERMANENT_SESSION_LIFETIME'] = 3600
     
     # Rate limiting
     app.config['RATELIMIT_STORAGE_URL'] = 'memory://'
     
     # Initialize extensions
     from .extensions import limiter, csrf, db, login_manager
+    from .email_utils import init_email
     
     limiter.init_app(app)
     csrf.init_app(app)
     db.init_app(app)
     login_manager.init_app(app)
+    init_email(app)
     
     # Register blueprints
     from .routes import main
@@ -54,6 +59,18 @@ def create_app(config_name='development'):
     # Register teardown handler for database connections
     from .biztrack_db import close_connection
     app.teardown_appcontext(close_connection)
+    
+    # ADDED: Middleware to attach user_id to request
+    @app.before_request
+    def set_request_user_id():
+        """Attach user_id to request object for easy access in routes."""
+        from flask_login import current_user
+        if current_user.is_authenticated:
+            from flask import request
+            request.user_id = current_user.id
+        else:
+            from flask import request
+            request.user_id = None
     
     # Add template context processors
     @app.context_processor

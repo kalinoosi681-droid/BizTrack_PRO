@@ -44,7 +44,7 @@
           </tr>
           <tr>
             <td class="fw-bold"><i class="fas fa-dollar-sign me-2 text-muted"></i>Price:</td>
-            <td class="text-success fw-bold fs-5">${{ "%.2f"|format(product.price) }}</td>
+            <td class="text-success fw-bold fs-5">M{{ "%.2f"|format(product.price) }}</td>
           </tr>
           <tr>
             <td class="fw-bold"><i class="fas fa-chart-line me-2 text-muted"></i>Performance:</td>
@@ -135,8 +135,13 @@
 </div>
 {% endblock %}
 
+{% block head_extra %}
+<!-- ADDED: Required libraries -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+{% endblock %}
+
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const saleHistory = {{ sale_history|tojson }};
@@ -154,21 +159,39 @@ document.addEventListener('DOMContentLoaded', function() {
                     data: data,
                     backgroundColor: 'rgba(25, 135, 84, 0.6)',
                     borderColor: 'rgba(25, 135, 84, 1)',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    borderRadius: 5
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true, title: { display: true, text: 'Units Sold' } } }
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        title: { display: true, text: 'Units Sold' }
+                    } 
+                }
             }
         });
     }
 });
 
+// FIXED: Proper html2pdf usage
 function generatePDF() {
     const element = document.getElementById('sales-history-report');
-    html2pdf(element, { filename: 'product_{{ product.id }}_sales_report.pdf' });
+    const opt = {
+        margin: 0.5,
+        filename: 'product_{{ product.id }}_sales_report.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    
+    html2pdf().set(opt).from(element).save().catch(function(error) {
+        console.error('PDF generation failed:', error);
+        alert('Failed to generate PDF. Please try again.');
+    });
 }
 </script>
 {% endblock %}

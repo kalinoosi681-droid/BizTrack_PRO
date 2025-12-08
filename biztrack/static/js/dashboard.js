@@ -1,43 +1,102 @@
 // ========================================
-// FIXED BIZTRACK PRO - Dashboard Intelligence
+// BIZTRACK PRO - Dashboard (FIXED VERSION)
 // ========================================
 
+console.log('🔍 Dashboard.js loading...');
+
+// Check if Chart.js is loaded
+if (typeof Chart === 'undefined') {
+    console.error('❌ Chart.js NOT LOADED! Dashboard will fail.');
+    alert('ERROR: Chart.js library not loaded. Check your internet connection and refresh the page.');
+} else {
+    console.log('✅ Chart.js loaded:', Chart.version);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('🎯 DOM Content Loaded - Initializing dashboard...');
     
     // Chart.js Global Config
-    Chart.defaults.font.family = 'Segoe UI, -apple-system, BlinkMacSystemFont, Roboto, Helvetica Neue, sans-serif';
-    const isDarkMode = document.documentElement.getAttribute('data-bs-theme') === 'dark';
-    Chart.defaults.color = isDarkMode ? '#adb5bd' : '#6c757d';
-    Chart.defaults.borderColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+    if (typeof Chart !== 'undefined') {
+        Chart.defaults.font.family = 'Segoe UI, -apple-system, BlinkMacSystemFont, Roboto, sans-serif';
+        const isDarkMode = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        Chart.defaults.color = isDarkMode ? '#adb5bd' : '#6c757d';
+        Chart.defaults.borderColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+    }
 
-    // Currency symbol (Lesotho Maloti)
     const CURRENCY = 'M';
 
-    // Real-Time Data Module
+    // ========================================
+    // MONTH REVENUE MODULE (ADDED)
+    // ========================================
+    const MonthRevenueModule = (() => {
+        const fetchMonthRevenue = async () => {
+            console.log('💰 Fetching month revenue...');
+            try {
+                const response = await fetch("/api/dashboard/month-revenue");
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('✅ Month revenue data received:', data);
+
+                const revenueEl = document.getElementById('monthRevenue');
+                if (revenueEl) {
+                    revenueEl.textContent = `${CURRENCY}${data.revenue.toFixed(2)}`;
+                }
+
+            } catch (error) {
+                console.error('❌ Month revenue fetch failed:', error);
+                const revenueEl = document.getElementById('monthRevenue');
+                if (revenueEl) {
+                    revenueEl.textContent = `${CURRENCY}0.00`;
+                    revenueEl.classList.add('text-danger');
+                }
+            }
+        };
+
+        const init = () => {
+            console.log('🚀 Initializing MonthRevenueModule...');
+            fetchMonthRevenue();
+            // Update every 5 minutes
+            setInterval(fetchMonthRevenue, 300000);
+            console.log('✅ MonthRevenueModule initialized');
+        };
+
+        return { init };
+    })();
+
+    // ========================================
+    // REAL-TIME DATA MODULE
+    // ========================================
     const RealtimeModule = (() => {
         let hourlyChartInstance = null;
-        let lastTransactionsJSON = '';
-        let lastHourlyDataJSON = '';
 
         const updateText = (elementId, text) => {
             const el = document.getElementById(elementId);
-            if (el && el.textContent !== text) {
+            if (el) {
                 el.textContent = text;
+                console.log(`✅ Updated ${elementId}:`, text);
+            } else {
+                console.warn(`⚠️ Element not found: ${elementId}`);
             }
         };
 
         const updateHourlyChart = (hourlyData) => {
-            const newHourlyDataJSON = JSON.stringify(hourlyData);
-            if (newHourlyDataJSON === lastHourlyDataJSON) return;
-            lastHourlyDataJSON = newHourlyDataJSON;
-
+            console.log('📊 Updating hourly chart with data:', hourlyData);
+            
             const canvas = document.getElementById('hourlyChart');
-            if (!canvas) return;
+            if (!canvas) {
+                console.warn('⚠️ hourlyChart canvas not found');
+                return;
+            }
             
             const ctx = canvas.getContext('2d');
-
             const labels = hourlyData.map(h => h.hour);
             const data = hourlyData.map(h => h.revenue);
+
+            console.log('📊 Chart data:', { labels, data });
 
             if (hourlyChartInstance) {
                 hourlyChartInstance.data.labels = labels;
@@ -76,24 +135,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Show canvas and hide spinner
-            const container = canvas.parentElement;
             canvas.style.display = 'block';
-            const spinner = container.querySelector('.spinner-border');
+            const spinner = canvas.parentElement.querySelector('.spinner-border');
             if (spinner) spinner.style.display = 'none';
+            
+            console.log('✅ Hourly chart rendered');
         };
 
         const updateLiveFeed = (transactions) => {
             const feedContainer = document.getElementById('liveTransactions');
-            if (!feedContainer) return;
-
-            if (!transactions || transactions.length === 0) {
-                feedContainer.innerHTML = '<div class="text-center text-muted py-5"><i class="fas fa-coffee fa-2x mb-3"></i><p>No transactions yet today. Time for a coffee!</p></div>';
+            if (!feedContainer) {
+                console.warn('⚠️ liveTransactions container not found');
                 return;
             }
 
-            const newTransactionsJSON = JSON.stringify(transactions);
-            if (newTransactionsJSON === lastTransactionsJSON) return;
-            lastTransactionsJSON = newTransactionsJSON;
+            console.log('🔔 Updating live feed with', transactions?.length || 0, 'transactions');
+
+            if (!transactions || transactions.length === 0) {
+                feedContainer.innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-coffee fa-2x mb-3"></i>
+                        <p>No transactions yet today. Time for a coffee!</p>
+                    </div>`;
+                return;
+            }
 
             const feedHTML = transactions.map(t => `
                 <div class="transaction-item mb-3 p-3 bg-light-subtle rounded-3">
@@ -110,13 +175,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `).join('');
             feedContainer.innerHTML = feedHTML;
+            
+            console.log('✅ Live feed updated');
         };
 
         const fetchData = async () => {
+            console.log('🔄 Fetching realtime data...');
+            
             try {
                 const response = await fetch("/api/dashboard/realtime");
-                if (!response.ok) throw new Error('Network error');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                console.log('✅ Realtime data received:', data);
 
                 updateText('todayRevenue', `${CURRENCY}${data.today.revenue.toFixed(2)}`);
                 updateText('todayTransactions', data.today.transactions);
@@ -126,28 +200,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateHourlyChart(data.hourly);
 
             } catch (error) {
-                console.error('Real-time update failed:', error);
+                console.error('❌ Real-time update failed:', error);
                 const feedContainer = document.getElementById('liveTransactions');
                 if (feedContainer) {
-                    feedContainer.innerHTML = '<div class="text-center text-danger py-5"><i class="fas fa-exclamation-triangle fa-2x mb-3"></i><p>Live data connection lost. Retrying...</p></div>';
+                    feedContainer.innerHTML = `
+                        <div class="text-center text-danger py-5">
+                            <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                            <p>Connection error: ${error.message}</p>
+                            <small>Check browser console for details</small>
+                        </div>`;
                 }
             }
         };
 
         const init = () => {
+            console.log('🚀 Initializing RealtimeModule...');
             fetchData();
-            setInterval(fetchData, 5000);
+            setInterval(fetchData, 60000); // Every 60 seconds
+            console.log('✅ RealtimeModule initialized');
         };
 
         return { init };
     })();
 
-    // Static Charts Module - FIXED DAILY CHART WITH MARGIN LINES
+    // ========================================
+    // STATIC CHARTS MODULE
+    // ========================================
     const ChartsModule = (() => {
         const createChart = async (elementId, url, configFactory) => {
+            console.log(`📊 Creating chart: ${elementId} from ${url}`);
+            
             const canvas = document.getElementById(elementId);
             if (!canvas) {
-                console.warn(`Canvas ${elementId} not found`);
+                console.warn(`⚠️ Canvas ${elementId} not found`);
                 return;
             }
             
@@ -156,22 +241,35 @@ document.addEventListener('DOMContentLoaded', () => {
             const spinner = container.querySelector('.spinner-border');
 
             try {
+                console.log(`🔄 Fetching data for ${elementId}...`);
                 const response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
+                console.log(`✅ Data received for ${elementId}:`, data);
                 
                 if (spinner) spinner.style.display = 'none';
                 canvas.style.display = 'block';
 
-                new Chart(ctx, configFactory(data));
+                const config = configFactory(data);
+                console.log(`🎨 Rendering ${elementId} chart...`);
+                new Chart(ctx, config);
+                console.log(`✅ ${elementId} chart rendered`);
 
             } catch (error) {
-                console.error(`Failed to load ${elementId}:`, error);
+                console.error(`❌ Failed to load ${elementId}:`, error);
                 if (spinner) spinner.style.display = 'none';
                 
                 const errorEl = document.createElement('div');
                 errorEl.className = 'alert alert-warning text-center';
-                errorEl.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Unable to load chart. Please refresh the page.';
+                errorEl.innerHTML = `
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Unable to load chart: ${error.message}<br>
+                    <small>Check browser console for details</small>
+                `;
                 container.appendChild(errorEl);
                 canvas.style.display = 'none';
             }
@@ -179,14 +277,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const initDailyChart = () => {
             createChart('dailyChart', '/api/dashboard/daily', d => {
-                // CRITICAL FIX: Ensure we have data
                 if (!d.dates || d.dates.length === 0) {
                     console.warn('No daily data available');
-                    return {
-                        type: 'bar',
-                        data: { labels: [], datasets: [] },
-                        options: {}
-                    };
+                    return { type: 'bar', data: { labels: [], datasets: [] }, options: {} };
                 }
 
                 return {
@@ -212,9 +305,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 tension: 0.4,
                                 yAxisID: 'y1',
                                 pointRadius: 4,
-                                pointBackgroundColor: "#198754",
-                                pointBorderColor: "#fff",
-                                pointBorderWidth: 2,
                                 order: 1
                             }
                         ]
@@ -222,28 +312,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        interaction: {
-                            mode: 'index',
-                            intersect: false
-                        },
                         plugins: { 
-                            legend: { 
-                                display: true,
-                                position: 'top'
-                            },
+                            legend: { display: true, position: 'top' },
                             tooltip: {
                                 callbacks: {
                                     label: function(context) {
                                         let label = context.dataset.label || '';
-                                        if (label) {
-                                            label += ': ';
-                                        }
-                                        if (context.parsed.y !== null) {
-                                            if (context.dataset.yAxisID === 'y1') {
-                                                label += context.parsed.y.toFixed(1) + '%';
-                                            } else {
-                                                label += CURRENCY + context.parsed.y.toFixed(2);
-                                            }
+                                        if (label) label += ': ';
+                                        if (context.dataset.yAxisID === 'y1') {
+                                            label += context.parsed.y.toFixed(1) + '%';
+                                        } else {
+                                            label += CURRENCY + context.parsed.y.toFixed(2);
                                         }
                                         return label;
                                     }
@@ -253,11 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         scales: {
                             y: { 
                                 beginAtZero: true, 
-                                position: 'left', 
-                                title: { 
-                                    display: true, 
-                                    text: `Revenue (${CURRENCY})` 
-                                },
+                                position: 'left',
                                 ticks: {
                                     callback: function(value) {
                                         return CURRENCY + value.toFixed(0);
@@ -268,10 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 beginAtZero: true,
                                 position: 'right',
                                 grid: { display: false },
-                                title: { 
-                                    display: true, 
-                                    text: 'Margin (%)' 
-                                },
                                 ticks: {
                                     callback: function(value) {
                                         return value.toFixed(1) + '%';
@@ -296,10 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         backgroundColor: "rgba(25, 135, 84, 0.1)",
                         fill: true,
                         tension: 0.4,
-                        pointRadius: 5,
-                        pointBackgroundColor: "#198754",
-                        pointBorderColor: "#fff",
-                        pointBorderWidth: 2
+                        pointRadius: 5
                     }]
                 },
                 options: {
@@ -355,17 +423,21 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const init = () => {
+            console.log('🚀 Initializing ChartsModule...');
             initDailyChart();
             initSalesChart();
             initCategoriesChart();
+            console.log('✅ ChartsModule initialized');
         };
 
         return { init };
     })();
 
-    // Initialize Modules
+    // Initialize ALL Modules
+    console.log('🎬 Starting module initialization...');
+    MonthRevenueModule.init(); // ADDED
     RealtimeModule.init();
     ChartsModule.init();
     
-    console.log('✅ Dashboard initialized successfully');
+    console.log('✅ Dashboard fully initialized');
 });
