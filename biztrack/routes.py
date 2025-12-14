@@ -4,23 +4,23 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, send_file, Response, stream_with_context
 from flask_login import login_required, current_user  # FIXED: Import from flask_login
 from biztrack.forms import (
-    CustomerAddForm, CustomerDeleteForm, CustomerUpdateForm, ProductBulkUpdateForm,
+    CustomerAddForm, CustomerDeleteForm, CustomerUpdateForm, ProductBulkUpdateForm, 
     ProductAddForm, ProductDeleteForm, ProductUpdateForm, ProductThresholdUpdateForm,
-    InvoiceAddForm, InvoiceDeleteForm, InvoiceUpdateForm,
-    PayrollAddForm, PayrollDeleteForm, PayrollUpdateForm
+    InvoiceAddForm, InvoiceDeleteForm, InvoiceUpdateForm
+    # PayrollAddForm, PayrollDeleteForm, PayrollUpdateForm
 )
 import json
 from .extensions import limiter, csrf
 from .biztrack_db import (
     get_top_sellers, execute_query, create_invoice_and_insert_sales,
     init_db, seed_default_data, compute_daily_store_metrics, compute_daily_product_metrics, _get_columns,
-    get_products, get_customers, get_invoices, get_low_stock_products,
+    get_products, get_customers, get_invoices, get_low_stock_products, # get_payrolls,
     get_customer_insights, compute_perf_percent, update_product_threshold,
-    get_utilities, get_payrolls, get_stock_performance, get_product_sale_history,
+    get_utilities, get_stock_performance, get_product_sale_history,
     export_table_to_csv, import_table_from_csv,
     add_product, update_product, delete_product,
     add_customer, update_customer, delete_customer,
-    add_payroll, update_payroll, delete_payroll,
+    # add_payroll, update_payroll, delete_payroll,
     record_sale, delete_sale, get_sale_details,
     execute_command, get_store_avg_7d_qty, get_product_7d_qty
 )
@@ -59,7 +59,7 @@ def index():
             (SELECT COUNT(*) FROM products) as product_count,
             (SELECT COUNT(*) FROM customers) as customer_count,
             (SELECT COUNT(*) FROM invoices) as invoice_count,
-            (SELECT COUNT(*) FROM payrolls) as payroll_count,
+            -- (SELECT COUNT(*) FROM payrolls) as payroll_count,
             (SELECT COALESCE(SUM(total), 0) FROM invoices) as total_sales;
     """
     kpis = execute_query(kpi_query, fetchone=True)
@@ -72,8 +72,8 @@ def index():
         product_count=kpis[0] if kpis else 0,
         customer_count=kpis[1] if kpis else 0,
         invoice_count=kpis[2] if kpis else 0,
-        payroll_count=kpis[3] if kpis else 0,
-        total_sales=float(kpis[4]) if kpis else 0.0
+        # payroll_count=kpis[3] if kpis else 0,
+        total_sales=float(kpis[3]) if kpis else 0.0
     )
 
 @main.route("/api/dashboard/realtime")
@@ -353,79 +353,117 @@ def api_search():
 @main.route("/products", methods=["GET", "POST"])
 @login_required
 def products():
-    """Product management with full CRUD"""
+    """Product management with full CRUD - FIXED BULK PRODUCT HANDLING"""
     add_form = ProductAddForm()
     delete_form = ProductDeleteForm()
     update_form = ProductUpdateForm()
-    bulk_update_form = ProductBulkUpdateForm() # Instantiate the bulk form
+    bulk_update_form = ProductBulkUpdateForm()
 
     if request.method == "POST":
         action = request.form.get("action")
         
+        # CRITICAL FIX: Explicitly check for "add" action
         if action == "add" and add_form.validate_on_submit():
             try:
-                add_product(
-                    add_form.name.data,
-                    add_form.category.data or "",
-                    add_form.qty.data,
-                    add_form.price.data
-                )
-                flash("✅ Product added successfully", "success")
+                # Get form data
+                name = add_form.name.data.strip()
+                category = add_form.category.data.strip() if add_form.category.data else ""
+                qty = add_form.qty.data
+                price = add_form.price.data
+                description = add_form.description.data.strip() if add_form.description.data else ""
+                is_bulk = add_form.is_bulk.data
+                pack_size = add_form.pack_size.data if is_bulk else 1
+                parent_id = add_form.parent_id.data if is_bulk and add_form.parent_id.data != 0 else None
+                
+                # Validation for bulk products
+                if is_bulk:
+                    if not parent_id:
+                        flash("âŒ Bulk products must have a base product selected!", "danger")
+                        return redirect(url_for("main.products"))
+                    
+                    if pack_size < 1:
+                        flash("âŒ Pack size must be at least 1!", "danger")
+                        return redirect(url_for("main.products"))
+                    
+                    # For bulk products, qty should be 0 (tracked by parent)
+                    qty = 0
+                
+                # Add product to database
+                add_product(name, category, qty, price, description, is_bulk, pack_size, parent_id)
+                
+                flash(f"âœ… Product '{name}' added successfully!", "success")
+                logger.info(f"Product added: {name} (Bulk: {is_bulk})")
+                
             except Exception as e:
-                flash(f"❌ Error adding product: {e}", "danger")
+                logger.error(f"Error adding product: {e}", exc_info=True)
+                flash(f"âŒ Error adding product: {str(e)}", "danger")
+            
             return redirect(url_for("main.products"))
 
         elif action == "delete" and delete_form.validate_on_submit():
             try:
-                delete_product(delete_form.id.data)
-                flash("✅ Product deleted successfully", "success")
+                product_id = delete_form.id.data
+                delete_product(product_id)
+                flash("âœ… Product deleted successfully", "success")
             except Exception as e:
-                flash(f"❌ Error deleting product: {e}", "danger")
+                flash(f"âŒ Error deleting product: {e}", "danger")
             return redirect(url_for("main.products"))
 
         elif action == "update" and update_form.validate_on_submit():
             try:
-                update_product(
-                    update_form.id.data,
-                    update_form.name.data,
-                    update_form.category.data or "",
-                    update_form.qty.data,
-                    update_form.price.data
-                )
-                flash("✅ Product updated successfully", "success")
+                product_id = update_form.id.data
+                name = update_form.name.data.strip()
+                category = update_form.category.data.strip() if update_form.category.data else ""
+                qty = update_form.qty.data
+                price = update_form.price.data
+                description = update_form.description.data.strip() if update_form.description.data else ""
+                is_bulk = update_form.is_bulk.data
+                pack_size = update_form.pack_size.data if is_bulk else 1
+                parent_id = update_form.parent_id.data if is_bulk and update_form.parent_id.data != 0 else None
+                
+                # Validation for bulk products
+                if is_bulk and not parent_id:
+                    flash("âŒ Bulk products must have a base product selected!", "danger")
+                    return redirect(url_for("main.products"))
+                
+                update_product(product_id, name, category, qty, price, description, is_bulk, pack_size, parent_id)
+                flash("âœ… Product updated successfully", "success")
             except Exception as e:
-                flash(f"❌ Error updating product: {e}", "danger")
+                logger.error(f"Error updating product: {e}", exc_info=True)
+                flash(f"âŒ Error updating product: {e}", "danger")
             return redirect(url_for("main.products"))
 
-    # --- Performance Optimization: Fetch all product performance data in one query ---
+    # Performance Optimization: Fetch all product performance data in one query
     products_list = execute_query("""
         WITH sales_30d AS (
             SELECT product_id, SUM(qty) as total_sold
             FROM sales
             WHERE date >= date('now', '-30 days')
             GROUP BY product_id
-        )
-        SELECT p.*, COALESCE(s.total_sold, 0) as sold_30d
+        ),
+        parent_names AS (SELECT id, name as parent_name FROM products)
+        SELECT p.*, COALESCE(s.total_sold, 0) as sold_30d, pp.parent_name
         FROM products p
         LEFT JOIN sales_30d s ON p.id = s.product_id
+        LEFT JOIN parent_names pp ON p.parent_id = pp.id
         ORDER BY p.name;
     """, fetch=True)
 
-    columns = _get_columns("products") + ['sold_30d']
+    columns = _get_columns("products") + ['sold_30d', 'parent_name']
     products_with_perf = [dict(zip(columns, row)) for row in products_list]
 
     for p in products_with_perf:
         if p['sold_30d'] > 10:
             p['perf_flag'] = "🔥 Fast"
         elif p['sold_30d'] < 3:
-            p['perf_flag'] = "🐢 Slow"
+            p['perf_flag'] = "🐌 Slow"
         else:
             p['perf_flag'] = "Normal"
 
     return render_template("products.html", products=products_with_perf,
                            add_form=add_form, delete_form=delete_form, update_form=update_form,
-                           bulk_update_form=bulk_update_form) # Pass form to template
-
+                           bulk_update_form=bulk_update_form)
+                           
 @main.route("/product/<int:pid>")
 @login_required
 def product_detail(pid):
@@ -544,19 +582,26 @@ def api_search_products():
     # Optimized query to fetch products and their 30-day sales in one go
     rows = execute_query("""
         WITH sales_30d AS (
-            SELECT product_id, SUM(qty) as total_sold
+            SELECT 
+                product_id, 
+                SUM(qty) as total_sold
             FROM sales WHERE date >= date('now', '-30 days')
             GROUP BY product_id
         )
-        SELECT p.id, p.name, p.category, p.price, p.qty, COALESCE(s.total_sold, 0)
+        SELECT 
+            p.id, p.name, p.category, p.price, 
+            CASE WHEN p.is_bulk = 1 AND p.parent_id IS NOT NULL THEN pp.qty ELSE p.qty END as stock_qty,
+            p.is_bulk, p.pack_size, 
+            COALESCE(s.total_sold, 0)
         FROM products p
         LEFT JOIN sales_30d s ON p.id = s.product_id
+        LEFT JOIN products pp ON p.parent_id = pp.id -- Join to get parent product stock
         WHERE LOWER(p.name) LIKE ? OR CAST(p.id AS TEXT) LIKE ? OR LOWER(p.category) LIKE ?
         ORDER BY p.name ASC LIMIT 15;
     """, (f"%{q}%", f"%{q}%", f"%{q}%"), fetch=True)
 
     out = []
-    for id_, name, category, price, qty, sold_30d in rows or []:
+    for id_, name, category, price, stock_qty, is_bulk, pack_size, sold_30d in rows or []:
         if sold_30d > 10:
             flag = "fast"
         elif sold_30d < 3:
@@ -568,7 +613,9 @@ def api_search_products():
             "name": name, 
             "category": category or "Uncategorized",
             "price": float(price), 
-            "qty": int(qty),
+            "qty": int(stock_qty), # Use the correct stock_qty
+            "is_bulk": is_bulk,
+            "pack_size": pack_size,
             "flag": flag,
             "display": f"#{id_} • {name} ({category}) • ${price:.2f}",
             "url": url_for("main.product_detail", pid=id_)
@@ -580,20 +627,22 @@ def api_search_products():
 def api_get_product(pid):
     """Get single product details by ID"""
     row = execute_query(
-        "SELECT id, name, category, price, qty FROM products WHERE id = ?;",
+        "SELECT id, name, category, price, qty, is_bulk, pack_size FROM products WHERE id = ?;",
         (pid,),
         fetchone=True
     )
     
     if not row:
         return jsonify({"error": "Product not found"}), 404
-    
+    id_, name, category, price, qty, is_bulk, pack_size = row
     return jsonify({
-        "id": row[0],
-        "name": row[1],
-        "category": row[2],
-        "price": float(row[3]),
-        "qty": row[4]
+        "id": id_,
+        "name": name,
+        "category": category,
+        "price": float(price),
+        "qty": qty,
+        "is_bulk": is_bulk,
+        "pack_size": pack_size
     })
 # ========================================
 # CUSTOMER ROUTES
@@ -767,7 +816,8 @@ def invoices():
         if action == "add":
             # Handle dynamic items from JavaScript
             try:
-                customer_id = int(request.form.get("customer_id"))
+                # Default to Walk-in Customer (ID 1) if not provided
+                customer_id = int(request.form.get("customer_id") or 1)
                 
                 # Parse items dynamically
                 items = []
@@ -849,7 +899,7 @@ def invoice_detail(iid):
     invoice = {
         "id": row[0], "invoice_number": row[1], "customer_id": row[2],
         "total": float(row[3] or 0), "date": row[4],
-        "customer_name": row[5] or "Unknown Customer",  "customer_email": row[6] or "", # Handle deleted customers
+        "customer_name": row[5] or "Unknown Customer", # Handle deleted customers
     }
     
     items = get_sale_details(iid)
@@ -916,70 +966,70 @@ def send_invoice_via_email(iid):
 # PAYROLL ROUTES
 # ========================================
 
-@main.route("/payrolls", methods=["GET", "POST"])
-@login_required
-def payrolls():
-    """Payroll management with full CRUD"""
-    add_form = PayrollAddForm()
-    delete_form = PayrollDeleteForm()
-    update_form = PayrollUpdateForm()
-
-    if request.method == "POST":
-        action = request.form.get("action")
-        
-        if action == "add" and add_form.validate_on_submit():
-            try:
-                date_str = add_form.date.data.strftime("%Y-%m-%d") if add_form.date.data else datetime.now().strftime("%Y-%m-%d")
-                add_payroll(
-                    add_form.employee_name.data,
-                    add_form.salary.data,
-                    date_str
-                )
-                flash("✅ Payroll record added successfully", "success")
-            except Exception as e:
-                flash(f"❌ Error: {str(e)}", "danger")
-            return redirect(url_for("main.payrolls"))
-
-        elif action == "update" and update_form.validate_on_submit():
-            try:
-                date_str = update_form.date.data.strftime("%Y-%m-%d") if update_form.date.data else datetime.now().strftime("%Y-%m-%d")
-                update_payroll(update_form.id.data, update_form.employee_name.data, update_form.salary.data, date_str)
-                flash("✅ Payroll record updated successfully", "success")
-            except Exception as e:
-                flash(f"❌ Error: {str(e)}", "danger")
-            return redirect(url_for("main.payrolls"))
-
-        elif action == "delete" and delete_form.validate_on_submit():
-            try:
-                delete_payroll(int(delete_form.id.data))
-                flash("✅ Payroll record deleted successfully", "success")
-            except Exception as e:
-                flash(f"❌ Error: {str(e)}", "danger")
-            return redirect(url_for("main.payrolls"))
-
-    # Performance Optimization: Calculate total payroll in the backend.
-    total_payroll_disbursed_result = execute_query("SELECT COALESCE(SUM(salary), 0) FROM payrolls;", fetchone=True)
-    total_payroll_disbursed = float(total_payroll_disbursed_result[0]) if total_payroll_disbursed_result else 0.0
-    payrolls = get_payrolls()
-    return render_template("payrolls.html", payrolls=payrolls,
-                           total_payroll_disbursed=total_payroll_disbursed,
-                           add_form=add_form, delete_form=delete_form, update_form=update_form)
-
-@main.route("/api/payroll/monthly")
-@login_required
-def api_payroll_monthly():
-    """API endpoint to get monthly payroll totals for the last 6 months."""
-    query = """
-        SELECT strftime('%Y-%m', date) as month, SUM(salary) as total_salary
-        FROM payrolls
-        WHERE date >= date('now', '-6 months')
-        GROUP BY month
-        ORDER BY month ASC;
-    """
-    rows = execute_query(query, fetch=True)
-    data = {row[0]: row[1] for row in rows}
-
-    return jsonify(data)
+# @main.route("/payrolls", methods=["GET", "POST"])
+# @login_required
+# def payrolls():
+#     """Payroll management with full CRUD"""
+#     add_form = PayrollAddForm()
+#     delete_form = PayrollDeleteForm()
+#     update_form = PayrollUpdateForm()
+# 
+#     if request.method == "POST":
+#         action = request.form.get("action")
+#         
+#         if action == "add" and add_form.validate_on_submit():
+#             try:
+#                 date_str = add_form.date.data.strftime("%Y-%m-%d") if add_form.date.data else datetime.now().strftime("%Y-%m-%d")
+#                 add_payroll(
+#                     add_form.employee_name.data,
+#                     add_form.salary.data,
+#                     date_str
+#                 )
+#                 flash("✅ Payroll record added successfully", "success")
+#             except Exception as e:
+#                 flash(f"❌ Error: {str(e)}", "danger")
+#             return redirect(url_for("main.payrolls"))
+# 
+#         elif action == "update" and update_form.validate_on_submit():
+#             try:
+#                 date_str = update_form.date.data.strftime("%Y-%m-%d") if update_form.date.data else datetime.now().strftime("%Y-%m-%d")
+#                 update_payroll(update_form.id.data, update_form.employee_name.data, update_form.salary.data, date_str)
+#                 flash("✅ Payroll record updated successfully", "success")
+#             except Exception as e:
+#                 flash(f"❌ Error: {str(e)}", "danger")
+#             return redirect(url_for("main.payrolls"))
+# 
+#         elif action == "delete" and delete_form.validate_on_submit():
+#             try:
+#                 delete_payroll(int(delete_form.id.data))
+#                 flash("✅ Payroll record deleted successfully", "success")
+#             except Exception as e:
+#                 flash(f"❌ Error: {str(e)}", "danger")
+#             return redirect(url_for("main.payrolls"))
+# 
+#     # Performance Optimization: Calculate total payroll in the backend.
+#     total_payroll_disbursed_result = execute_query("SELECT COALESCE(SUM(salary), 0) FROM payrolls;", fetchone=True)
+#     total_payroll_disbursed = float(total_payroll_disbursed_result[0]) if total_payroll_disbursed_result else 0.0
+#     payrolls = get_payrolls()
+#     return render_template("payrolls.html", payrolls=payrolls,
+#                            total_payroll_disbursed=total_payroll_disbursed,
+#                            add_form=add_form, delete_form=delete_form, update_form=update_form)
+# 
+# @main.route("/api/payroll/monthly")
+# @login_required
+# def api_payroll_monthly():
+#     """API endpoint to get monthly payroll totals for the last 6 months."""
+#     query = """
+#         SELECT strftime('%Y-%m', date) as month, SUM(salary) as total_salary
+#         FROM payrolls
+#         WHERE date >= date('now', '-6 months')
+#         GROUP BY month
+#         ORDER BY month ASC;
+#     """
+#     rows = execute_query(query, fetch=True)
+#     data = {row[0]: row[1] for row in rows}
+# 
+#     return jsonify(data)
 
 
 # ========================================
@@ -1067,7 +1117,7 @@ def utils():
 @login_required
 def export_table(table):
     """Export table to CSV"""
-    allowed_tables = ["products", "customers", "invoices", "sales", "payrolls"]
+    allowed_tables = ["products", "customers", "invoices", "sales"] #, "payrolls"]
     if table not in allowed_tables:
         flash(f"❌ Invalid table name: {table}", "danger")
         return redirect(url_for("main.utils"))
@@ -1091,7 +1141,7 @@ def export_table(table):
 @login_required
 def import_table(table):
     """FIXED: CSV Import with proper CSRF handling"""
-    allowed_tables = ["products", "customers", "invoices", "sales", "payrolls"]
+    allowed_tables = ["products", "customers", "invoices", "sales"] #, "payrolls"]
     
     if table not in allowed_tables:
         flash(f"❌ Invalid table name: {table}", "danger")

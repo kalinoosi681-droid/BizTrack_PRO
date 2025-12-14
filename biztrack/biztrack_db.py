@@ -215,7 +215,12 @@ def init_db() -> None:
                 qty INTEGER NOT NULL DEFAULT 0,
                 price REAL NOT NULL DEFAULT 0.0,
                 low_stock_threshold INTEGER DEFAULT 10,
-                UNIQUE(name, category)
+                description TEXT DEFAULT '',
+                is_bulk INTEGER NOT NULL DEFAULT 0,
+                pack_size INTEGER NOT NULL DEFAULT 1,
+                parent_id INTEGER,
+                UNIQUE(name, category),
+                FOREIGN KEY(parent_id) REFERENCES products(id) ON DELETE SET NULL
             );
         """)
 
@@ -258,17 +263,17 @@ def init_db() -> None:
             );
         """)
 
-        # Payrolls
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS payrolls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                employee_name TEXT,
-                salary REAL,
-                date TEXT,
-                UNIQUE(employee_name, date)
-            );
-        """)
-
+        # # Payrolls
+        # cur.execute("""
+        #     CREATE TABLE IF NOT EXISTS payrolls (
+        #         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        #         employee_name TEXT,
+        #         salary REAL,
+        #         date TEXT,
+        #         UNIQUE(employee_name, date)
+        #     );
+        # """)
+        # 
         # Users
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -314,7 +319,7 @@ def init_db() -> None:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_products_name_lower ON products(LOWER(name));")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_products_category_lower ON products(LOWER(category));")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_customers_name_lower ON customers(LOWER(name));")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_payrolls_employee ON payrolls(employee_name);")
+        # cur.execute("CREATE INDEX IF NOT EXISTS idx_payrolls_employee ON payrolls(employee_name);")
 
         # Advanced Upgrade: Full-Text Search (FTS5)
         cur.execute("""
@@ -367,6 +372,21 @@ def migrate_schema() -> None:
                     ADD COLUMN description TEXT DEFAULT '';
                 """)
                 logger.info("✅ Added description to products")
+
+            if 'is_bulk' not in products_cols:
+                logger.info("Adding is_bulk column to products table")
+                cur.execute("ALTER TABLE products ADD COLUMN is_bulk INTEGER NOT NULL DEFAULT 0;")
+                logger.info("✅ Added is_bulk to products")
+
+            if 'pack_size' not in products_cols:
+                logger.info("Adding pack_size column to products table")
+                cur.execute("ALTER TABLE products ADD COLUMN pack_size INTEGER NOT NULL DEFAULT 1;")
+                logger.info("✅ Added pack_size to products")
+
+            if 'parent_id' not in products_cols:
+                logger.info("Adding parent_id column to products table")
+                cur.execute("ALTER TABLE products ADD COLUMN parent_id INTEGER REFERENCES products(id) ON DELETE SET NULL;")
+                logger.info("✅ Added parent_id to products")
             
             # Check if metrics tables exist, create if missing
             cur.execute("""
@@ -513,10 +533,10 @@ def remove_duplicates() -> None:
                        WHERE id NOT IN (SELECT MIN(id) FROM products GROUP BY name, category);""")
         cur.execute("""DELETE FROM customers
                        WHERE id NOT IN (SELECT MIN(id) FROM customers GROUP BY name, phone);""")
-        cur.execute("""DELETE FROM sales
-                       WHERE id NOT IN (SELECT MIN(id) FROM sales GROUP BY customer_id, product_id, qty, date);""")
-        cur.execute("""DELETE FROM payrolls
-                       WHERE id NOT IN (SELECT MIN(id) FROM payrolls GROUP BY employee_name, salary, date);""")
+        # cur.execute("""DELETE FROM sales
+        #                WHERE id NOT IN (SELECT MIN(id) FROM sales GROUP BY customer_id, product_id, qty, date);""")
+        # cur.execute("""DELETE FROM payrolls
+        #                WHERE id NOT IN (SELECT MIN(id) FROM payrolls GROUP BY employee_name, salary, date);""")
         conn.commit()
         cur.close()
         logger.info("Duplicate records removed successfully")
@@ -641,6 +661,15 @@ def seed_default_data() -> None:
         )
         conn.commit()
 
+        # Seed default "Walk-in Customer" with ID 1
+        walkin_exists = execute_query("SELECT 1 FROM customers WHERE id = 1;", fetchone=True)
+        if not walkin_exists:
+            execute_query(
+                "INSERT INTO customers (id, name, phone, email) VALUES (?, ?, ?, ?);",
+                (1, "Walk-in Customer", "N/A", "N/A"),
+                commit=True
+            )
+
         # Seed default admin user
         admin_exists = execute_query("SELECT 1 FROM users WHERE username = 'admin';", fetchone=True)
         if not admin_exists:
@@ -748,23 +777,25 @@ def get_invoices() -> list[dict]:
     columns = ["id", "invoice_number", "customer_id", "customer_name", "total", "date"]
     return [dict(zip(columns, row)) for row in rows]
 
-def add_product(name: str, category: str, qty: int, price: float) -> bool:
+def add_product(name: str, category: str, qty: int, price: float, description: str, is_bulk: bool, pack_size: int, parent_id: Optional[int]) -> bool:
     try:
         execute_query(
-            "INSERT INTO products (name, category, qty, price) VALUES (?, ?, ?, ?);",
-            (name, category, qty, price),
+            """INSERT INTO products (name, category, qty, price, description, is_bulk, pack_size, parent_id) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?);""",
+            (name, category, qty, price, description, 1 if is_bulk else 0, pack_size, parent_id),
             commit=True
         )
         return True
     except Exception as e:
         logger.error(f"Failed to add product: {e}")
-        return False
+        raise e
 
-def update_product(pid: int, name: str, category: str, qty: int, price: float) -> bool:
+def update_product(pid: int, name: str, category: str, qty: int, price: float, description: str, is_bulk: bool, pack_size: int, parent_id: Optional[int]) -> bool:
     try:
         execute_query(
-            "UPDATE products SET name=?, category=?, qty=?, price=? WHERE id=?;",
-            (name, category, qty, price, pid),
+            """UPDATE products SET name=?, category=?, qty=?, price=?, description=?, is_bulk=?, pack_size=?, parent_id=? 
+               WHERE id=?;""",
+            (name, category, qty, price, description, 1 if is_bulk else 0, pack_size, parent_id, pid),
             commit=True
         )
         return True
@@ -910,42 +941,42 @@ def get_customer_insights(cid: int) -> dict:
 # ============================
 # Payroll CRUD
 # ============================
-def get_payrolls() -> list[dict]:
-    rows = execute_query("SELECT * FROM payrolls;", fetch=True)
-    columns = _get_columns("payrolls")
-    return [dict(zip(columns, row)) for row in rows]
-
-def add_payroll(employee_name: str, salary: float, date: str) -> bool:
-    try:
-        execute_query(
-            "INSERT INTO payrolls (employee_name, salary, date) VALUES (?, ?, ?);",
-            (employee_name, salary, date),
-            commit=True
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Failed to add payroll: {e}")
-        return False
-
-def update_payroll(pid: int, employee_name: str, salary: float, date: str) -> bool:
-    try:
-        execute_query(
-            "UPDATE payrolls SET employee_name=?, salary=?, date=? WHERE id=?;",
-            (employee_name, salary, date, pid),
-            commit=True
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Failed to update payroll: {e}")
-        return False
-
-def delete_payroll(pid: int) -> bool:
-    try:
-        execute_query("DELETE FROM payrolls WHERE id=?;", (pid,), commit=True)
-        return True
-    except Exception as e:
-        logger.error(f"Failed to delete payroll: {e}")
-        return False
+# def get_payrolls() -> list[dict]:
+#     rows = execute_query("SELECT * FROM payrolls;", fetch=True)
+#     columns = _get_columns("payrolls")
+#     return [dict(zip(columns, row)) for row in rows]
+# 
+# def add_payroll(employee_name: str, salary: float, date: str) -> bool:
+#     try:
+#         execute_query(
+#             "INSERT INTO payrolls (employee_name, salary, date) VALUES (?, ?, ?);",
+#             (employee_name, salary, date),
+#             commit=True
+#         )
+#         return True
+#     except Exception as e:
+#         logger.error(f"Failed to add payroll: {e}")
+#         return False
+# 
+# def update_payroll(pid: int, employee_name: str, salary: float, date: str) -> bool:
+#     try:
+#         execute_query(
+#             "UPDATE payrolls SET employee_name=?, salary=?, date=? WHERE id=?;",
+#             (employee_name, salary, date, pid),
+#             commit=True
+#         )
+#         return True
+#     except Exception as e:
+#         logger.error(f"Failed to update payroll: {e}")
+#         return False
+# 
+# def delete_payroll(pid: int) -> bool:
+#     try:
+#         execute_query("DELETE FROM payrolls WHERE id=?;", (pid,), commit=True)
+#         return True
+#     except Exception as e:
+#         logger.error(f"Failed to delete payroll: {e}")
+#         return False
 
 # ============================
 # Invoices & Sales
@@ -958,21 +989,23 @@ def get_sales() -> list[dict]:
 def get_sale_details(invoice_id: int) -> list[dict]:
     """Returns enriched line items for a given invoice_id."""
     # This query now joins with products to get the name and calculates
-    # the historical unit price from the sales record.
+    # the historical unit price, along with bulk item details.
     query = """
         SELECT 
             s.product_id,
             p.name as product_name,
             s.qty,
             s.total_price,
-            (s.total_price / s.qty) as price -- Calculate historical unit price
+            (s.total_price / s.qty) as price, -- Calculate historical unit price
+            p.is_bulk,
+            p.pack_size
         FROM sales s
         JOIN products p ON s.product_id = p.id
         WHERE s.invoice_id = ?;
     """
     rows = execute_query(query, (invoice_id,), fetch=True)
     return [
-        {"product_id": r[0], "product_name": r[1], "qty": r[2], "total_price": r[3], "price": r[4]}
+        {"product_id": r[0], "product_name": r[1], "qty": r[2], "total_price": r[3], "price": r[4], "is_bulk": r[5], "pack_size": r[6]}
         for r in rows
     ]
 
@@ -989,18 +1022,30 @@ def create_invoice_and_insert_sales(
     if not sale_time:
         sale_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Validate stock and compute line_total
+    # Validate stock, compute line_total, and determine stock deduction
     for it in items:
         pid = it["pid"]
         qty = it["qty"]
         price = float(it["price"])
-        stock = execute_query("SELECT qty FROM products WHERE id = ?;", (pid,), fetchone=True)
-        if stock is None:
+        
+        # Check if the product is a bulk item and get its details
+        product_info = execute_query("SELECT qty, is_bulk, pack_size, parent_id FROM products WHERE id = ?;", (pid,), fetchone=True)
+        if product_info is None:
             logger.error(f"Product ID {pid} not found")
             return None
-        if qty > stock[0]: # Check if stock is sufficient
-            logger.error(f"Invoice creation failed: Insufficient stock for Product ID {pid}. Requested: {qty}, Available: {stock[0]}")
+
+        stock_qty, is_bulk, pack_size, parent_id = product_info
+        
+        # The product whose stock we will deduct
+        stock_product_id = parent_id if is_bulk and parent_id else pid
+        # The total number of base units to deduct
+        units_to_deduct = qty * pack_size if is_bulk else qty
+
+        current_stock = execute_query("SELECT qty FROM products WHERE id = ?;", (stock_product_id,), fetchone=True)[0]
+        if units_to_deduct > current_stock:
+            logger.error(f"Invoice creation failed: Insufficient stock for Product ID {stock_product_id}. Requested: {units_to_deduct}, Available: {current_stock}")
             return None
+
         it["line_total"] = round(qty * price, 2)
 
     invoice_number = generate_invoice_number() # Generate a unique invoice number
@@ -1020,9 +1065,15 @@ def create_invoice_and_insert_sales(
                 "INSERT INTO sales (customer_id, product_id, qty, total_price, date, invoice_id) VALUES (?, ?, ?, ?, ?, ?);",
                 (customer_id, it["pid"], it["qty"], it["line_total"], sale_time, invoice_id)
             )
+            # Deduct from the correct stock (either self or parent)
+            product_info = execute_query("SELECT is_bulk, pack_size, parent_id FROM products WHERE id = ?;", (it["pid"],), fetchone=True)
+            is_bulk, pack_size, parent_id = product_info
+            stock_product_id = parent_id if is_bulk and parent_id else it["pid"]
+            units_to_deduct = it["qty"] * pack_size if is_bulk else it["qty"]
+
             cur.execute(
                 "UPDATE products SET qty = qty - ? WHERE id = ?;",
-                (it["qty"], it["pid"])
+                (units_to_deduct, stock_product_id)
             )
         conn.commit()
         logger.info(f"Invoice {invoice_number} created successfully with ID {invoice_id}")
@@ -1168,11 +1219,13 @@ def execute_command(command: str, admin_user_id: int = None) -> dict:
             customer_count = execute_query("SELECT COUNT(*) FROM customers;", fetchone=True)[0]
             invoice_count = execute_query("SELECT COUNT(*) FROM invoices;", fetchone=True)[0]
             payroll_count = execute_query("SELECT COUNT(*) FROM payrolls;", fetchone=True)[0]
+            # payroll_count = execute_query("SELECT COUNT(*) FROM payrolls;", fetchone=True)[0]
             return {
                 "success": True,
                 "output": (
                     f"Products: {product_count}, Customers: {customer_count}, "
                     f"Invoices: {invoice_count}, Payrolls: {payroll_count}"
+                    f"Invoices: {invoice_count}"
                 ),
                 "error": None
             }
@@ -1194,9 +1247,12 @@ def execute_command(command: str, admin_user_id: int = None) -> dict:
             success = import_table_from_csv("products", filepath)
             return {"success": success, "output": f"Imported from {filepath}", "error": None if success else "Import failed"}
 
-        elif cmd == "payroll":
-            payrolls = get_payrolls()
-            return {"success": True, "output": str(payrolls), "error": None}
+        #elif cmd == "payroll":
+            #payrolls = get_payrolls()
+            #return {"success": True, "output": str(payrolls), "error": None}
+        # elif cmd == "payroll":
+        #     payrolls = get_payrolls()
+        #     return {"success": True, "output": str(payrolls), "error": None}
 
     except Exception as e:
         logger.exception("Command execution error")

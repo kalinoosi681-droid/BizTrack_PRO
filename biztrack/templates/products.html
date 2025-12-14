@@ -35,30 +35,49 @@
       <div class="card-body">
         <form method="POST" id="product_add_form">
           {{ add_form.hidden_tag() }}
-          <input type="hidden" name="action" value="add">
           
           <div class="mb-3">
             <label class="form-label"><i class="fas fa-tag me-1"></i>Product Name</label>
             {{ add_form.name(class="form-control", id="add_product_name", placeholder="e.g., Premium Coffee Beans", **{'autocomplete': 'off'}) }}
-            <small class="text-muted">Type product name for AI suggestions</small>
           </div>
           
-          <!-- AI Suggestions Container -->
-          <div id="ai_product_suggestions" class="mb-3" style="display: none;"></div>
+          <div class="mb-3">
+            <label class="form-label"><i class="fas fa-align-left me-1"></i>Description</label>
+            {{ add_form.description(class="form-control", id="add_product_description", placeholder="e.g., 6-Pack of 1L Milk Cartons") }}
+          </div>
           
           <div class="mb-3">
             <label class="form-label"><i class="fas fa-list me-1"></i>Category</label>
-            {{ add_form.category(class="form-control", id="add_product_category", placeholder="AI will suggest...", **{'autocomplete': 'off'}) }}
+            {{ add_form.category(class="form-control", id="add_product_category", placeholder="e.g., Dairy", **{'autocomplete': 'off'}) }}
           </div>
           
           <div class="row">
             <div class="col-6 mb-3">
               <label class="form-label"><i class="fas fa-cubes me-1"></i>Quantity</label>
-              {{ add_form.qty(class="form-control", id="add_product_qty", placeholder="AI suggests...", min="0", **{'autocomplete': 'off'}) }}
+              {{ add_form.qty(class="form-control", id="add_product_qty", placeholder="Stock count", min="0", **{'autocomplete': 'off'}) }}
+              <small class="form-text text-muted">For bulk items, set to 0. Stock is tracked by the base item.</small>
             </div>
             <div class="col-6 mb-3">
               <label class="form-label"><i class="fas fa-dollar-sign me-1"></i>Price (M)</label>
-              {{ add_form.price(class="form-control", id="add_product_price", step="0.01", placeholder="AI suggests...", **{'autocomplete': 'off'}) }}
+              {{ add_form.price(class="form-control", id="add_product_price", step="0.01", placeholder="Selling price", **{'autocomplete': 'off'}) }}
+            </div>
+          </div>
+
+          <div class="form-check form-switch mb-3">
+            {{ add_form.is_bulk(class="form-check-input", id="add_is_bulk") }}
+            <label class="form-check-label" for="add_is_bulk">This is a bulk product (package)</label>
+          </div>
+
+          <div id="add_bulk_fields" style="display: none;">
+            <div class="row">
+              <div class="col-6 mb-3">
+                <label class="form-label"><i class="fas fa-box me-1"></i>Items per Pack</label>
+                {{ add_form.pack_size(class="form-control", id="add_pack_size") }}
+              </div>
+              <div class="col-6 mb-3">
+                <label class="form-label"><i class="fas fa-link me-1"></i>Base Product</label>
+                {{ add_form.parent_id(class="form-select", id="add_parent_id") }}
+              </div>
             </div>
           </div>
           
@@ -77,31 +96,53 @@
       <div class="card-body">
         <form method="POST">
           {{ update_form.hidden_tag() }}
-          <input type="hidden" name="action" value="update">
           
           <div class="mb-3">
             <label class="form-label">Product ID</label>
-            {{ update_form.id(class="form-control", id="update_product_id", placeholder="ID") }}
+            {{ update_form.id(class="form-control", id="update_product_id", readonly=True) }}
           </div>
           
           <div class="mb-3">
             <label class="form-label">Name</label>
-            {{ update_form.name(class="form-control", id="update_product_name", placeholder="Name") }}
+            {{ update_form.name(class="form-control", id="update_product_name") }}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            {{ update_form.description(class="form-control", id="update_product_description") }}
           </div>
           
           <div class="mb-3">
             <label class="form-label">Category</label>
-            {{ update_form.category(class="form-control", id="update_product_category", placeholder="Category") }}
+            {{ update_form.category(class="form-control", id="update_product_category") }}
           </div>
           
           <div class="row">
             <div class="col-6 mb-3">
               <label class="form-label">Quantity</label>
-              {{ update_form.qty(class="form-control", id="update_product_qty", placeholder="Qty") }}
+              {{ update_form.qty(class="form-control", id="update_product_qty") }}
             </div>
             <div class="col-6 mb-3">
               <label class="form-label">Price (M)</label>
-              {{ update_form.price(class="form-control", id="update_product_price", step="0.01", placeholder="Price") }}
+              {{ update_form.price(class="form-control", id="update_product_price", step="0.01") }}
+            </div>
+          </div>
+
+          <div class="form-check form-switch mb-3">
+            {{ update_form.is_bulk(class="form-check-input", id="update_is_bulk") }}
+            <label class="form-check-label" for="update_is_bulk">This is a bulk product (package)</label>
+          </div>
+
+          <div id="update_bulk_fields" style="display: none;">
+            <div class="row">
+              <div class="col-6 mb-3">
+                <label class="form-label">Items per Pack</label>
+                {{ update_form.pack_size(class="form-control", id="update_pack_size") }}
+              </div>
+              <div class="col-6 mb-3">
+                <label class="form-label">Base Product</label>
+                {{ update_form.parent_id(class="form-select", id="update_parent_id") }}
+              </div>
             </div>
           </div>
           
@@ -193,7 +234,12 @@
             <tr>
               <td><input type="checkbox" name="product_ids" value="{{ p.id }}" class="product-checkbox"></td>
               <td><span class="badge bg-secondary">{{ p.id }}</span></td>
-              <td class="fw-semibold"><a href="{{ url_for('main.product_detail', pid=p.id) }}" class="text-decoration-none">{{ p.name }}</a></td>
+              <td class="fw-semibold">
+                <a href="{{ url_for('main.product_detail', pid=p.id) }}" class="text-decoration-none">{{ p.name }}</a>
+                {% if p.is_bulk %}
+                  <br><small class="text-muted"><i class="fas fa-box-open me-1"></i>Bulk of {{ p.pack_size }} <i class="fas fa-arrow-right"></i> {{ p.parent_name or 'N/A' }}</small>
+                {% endif %}
+              </td>
               <td><span class="badge bg-info">{{ p.category or 'Uncategorized' }}</span></td>
               <td>
                 {% set threshold = p.low_stock_threshold or 10 %}
@@ -211,7 +257,17 @@
                 {% endif %}
               </td>
               <td>
-                <button type="button" class="btn btn-sm btn-outline-info edit-product-btn" data-id="{{ p.id }}" data-name="{{ p.name }}" data-category="{{ p.category or '' }}" data-qty="{{ p.qty }}" data-price="{{ p.price }}" title="Edit Product">
+                <button type="button" class="btn btn-sm btn-outline-info edit-product-btn" 
+                        data-id="{{ p.id }}" 
+                        data-name="{{ p.name }}" 
+                        data-description="{{ p.description or '' }}"
+                        data-category="{{ p.category or '' }}" 
+                        data-qty="{{ p.qty }}" 
+                        data-price="{{ p.price }}"
+                        data-is_bulk="{{ p.is_bulk }}"
+                        data-pack_size="{{ p.pack_size }}"
+                        data-parent_id="{{ p.parent_id or 0 }}"
+                        title="Edit Product">
                   <i class="fas fa-edit"></i>
                 </button>
                 <a href="{{ url_for('main.product_detail', pid=p.id) }}" class="btn btn-sm btn-outline-primary" title="View Details">
@@ -239,14 +295,40 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // FIXED: Edit Button Handler
+    // This now populates all the new fields, including the bulk-related ones.
     document.querySelectorAll('.edit-product-btn').forEach(button => {
         button.addEventListener('click', function() {
-            document.getElementById('update_product_id').value = this.dataset.id;
-            document.getElementById('update_product_name').value = this.dataset.name;
-            document.getElementById('update_product_category').value = this.dataset.category;
-            document.getElementById('update_product_qty').value = this.dataset.qty;
-            document.getElementById('update_product_price').value = this.dataset.price;
+            const ds = this.dataset;
+            document.getElementById('update_product_id').value = ds.id;
+            document.getElementById('update_product_name').value = ds.name;
+            document.getElementById('update_product_description').value = ds.description;
+            document.getElementById('update_product_category').value = ds.category;
+            document.getElementById('update_product_qty').value = ds.qty;
+            document.getElementById('update_product_price').value = ds.price;
+            
+            const isBulkCheckbox = document.getElementById('update_is_bulk');
+            isBulkCheckbox.checked = (ds.is_bulk === '1');
+            document.getElementById('update_pack_size').value = ds.pack_size;
+            document.getElementById('update_parent_id').value = ds.parent_id;
+
+            // Manually trigger the change event to show/hide bulk fields
+            isBulkCheckbox.dispatchEvent(new Event('change'));
+
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    });
+
+    // --- NEW: Dynamic Bulk Fields ---
+    // This function shows/hides the bulk-related fields based on the checkbox state.
+    function handleBulkFields(checkboxId, fieldsContainerId) {
+        const checkbox = document.getElementById(checkboxId);
+        const fieldsContainer = document.getElementById(fieldsContainerId);
+        fieldsContainer.style.display = checkbox.checked ? 'block' : 'none';
+    }
+
+    ['add_is_bulk', 'update_is_bulk'].forEach(id => {
+        document.getElementById(id).addEventListener('change', () => {
+            handleBulkFields(id, id.replace('is_bulk', 'bulk_fields'));
         });
     });
 
@@ -284,6 +366,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     toggleBulkPanel();
     toggleActionInputs();
+
+    // Initialize bulk field visibility on page load
+    handleBulkFields('add_is_bulk', 'add_bulk_fields');
+    handleBulkFields('update_is_bulk', 'update_bulk_fields');
 });
 </script>
 {% endblock %}

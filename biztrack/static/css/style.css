@@ -561,10 +561,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ========================================
-   PRINT STYLES
+   PROFESSIONAL PRINT STYLES
    ======================================== */
 
 @media print {
+    /* Hide unnecessary elements */
     .no-print,
     #ai-chat-widget,
     #ai-chat-toggle-btn,

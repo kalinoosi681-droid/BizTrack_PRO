@@ -18,15 +18,21 @@
       <div class="row mb-4">
         <div class="col-md-6">
           <label class="form-label"><i class="fas fa-user me-1"></i>Search Customer</label>
-          <div class="position-relative">
+          <div class="input-group">
             <input id="inv_customer_search" type="text" class="form-control" 
-                   placeholder="Type customer name or ID..." autocomplete="off" required>
+                   placeholder="Type customer name or ID... (Optional)" autocomplete="off">
+            <button class="btn btn-outline-secondary" type="button" id="walkinCustomerBtn" title="Select Walk-in Customer">
+              <i class="fas fa-walking me-1"></i>Walk-in
+            </button>
             <div id="inv_customer_suggest" class="dropdown-menu w-100" style="max-height: 300px; overflow-y: auto; z-index: 1051;"></div>
           </div>
         </div>
         <div class="col-md-6">
           <label class="form-label"><i class="fas fa-hashtag me-1"></i>Customer ID</label>
-          <input type="number" name="customer_id" id="inv_customer_id" class="form-control" placeholder="Will auto-fill" readonly required>
+          <input type="number" name="customer_id" id="inv_customer_id" class="form-control" placeholder="Defaults to Walk-in" readonly>
+          <small class="form-text text-muted">
+            If left blank, the sale will be assigned to "Walk-in Customer".
+          </small>
         </div>
       </div>
 
@@ -42,7 +48,7 @@
         <div id="itemsContainer">
           <!-- Initial item row -->
           <div class="row mb-3 pb-3 border-bottom item-row" data-item-index="0">
-            <div class="col-md-5">
+            <div class="col-md-4">
               <label class="form-label"><i class="fas fa-box me-1"></i>Product</label>
               <div class="position-relative">
                 <input type="text" class="form-control product_search" 
@@ -51,10 +57,15 @@
               </div>
               <input type="number" name="items-0-pid" class="form-control mt-2" placeholder="Product ID" readonly required>
             </div>
+            <div class="col-md-1">
+              <label class="form-label"><i class="fas fa-box-open me-1"></i>Pack</label>
+              <input type="text" class="form-control pack-size-info" value="x1" readonly title="Items per pack">
+            </div>
             
             <div class="col-md-3">
               <label class="form-label"><i class="fas fa-shopping-cart me-1"></i>Quantity</label>
               <input type="number" name="items-0-qty" class="form-control qty-input" placeholder="Qty" min="1" required>
+              <small class="form-text text-muted stock-indicator">Stock: -</small>
             </div>
             
             <div class="col-md-3">
@@ -176,5 +187,44 @@
 <script>
   // The complex JS for this page is now handled in auto.js
   // to improve maintainability and reduce code duplication.
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const itemsContainer = document.getElementById('itemsContainer');
+
+    // --- NEW: Walk-in Customer Button ---
+    const walkinBtn = document.getElementById('walkinCustomerBtn');
+    if (walkinBtn) {
+      walkinBtn.addEventListener('click', function() {
+        // The default walk-in customer has ID 1
+        const customerIdInput = document.getElementById('inv_customer_id');
+        const customerSearchInput = document.getElementById('inv_customer_search');
+        
+        customerIdInput.value = '1';
+        customerSearchInput.value = 'Walk-in Customer';
+      });
+    }
+
+    // Use event delegation to handle inputs on current and future item rows
+    itemsContainer.addEventListener('input', function(event) {
+      // Check if the event was triggered on a quantity input
+      if (event.target.classList.contains('qty-input')) {
+        const qtyInput = event.target;
+        const itemRow = qtyInput.closest('.item-row');
+        
+        const stockIndicator = itemRow.querySelector('.stock-indicator');
+        const packSizeInput = itemRow.querySelector('.pack-size-info');
+
+        // Extract stored data from the elements
+        const availableStock = parseInt(stockIndicator.dataset.stock, 10);
+        const packSize = parseInt(packSizeInput.dataset.packSize, 10);
+        const requestedQty = parseInt(qtyInput.value, 10);
+
+        // Check if we have valid numbers to compare
+        if (!isNaN(availableStock) && !isNaN(packSize) && !isNaN(requestedQty)) {
+          qtyInput.classList.toggle('is-invalid', (requestedQty * packSize) > availableStock);
+        }
+      }
+    });
+  });
 </script>
 {% endblock %}

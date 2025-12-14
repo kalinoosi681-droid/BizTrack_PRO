@@ -86,7 +86,11 @@
               <a href="{{ url_for('main.product_detail', pid=item.product_id) }}" class="text-decoration-none fw-semibold">
                 {{ item.product_name }}
               </a>
-              <small class="d-block text-muted">Product ID: {{ item.product_id }}</small>
+              {% if item.is_bulk %}
+                <span class="badge bg-info ms-2">Bulk Pack ({{ item.pack_size }} items)</span>
+              {% else %}
+                <small class="d-block text-muted">Product ID: {{ item.product_id }}</small>
+              {% endif %}
             </td>
             <td class="text-center">{{ item.qty }}</td>
             <td class="text-end">M{{ "%.2f"|format(item.price) }}</td>

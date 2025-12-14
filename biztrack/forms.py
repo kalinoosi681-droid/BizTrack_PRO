@@ -67,9 +67,20 @@ class ProductAddForm(FlaskForm):
     action = HiddenField(default="add")
     name = StringField("Name", validators=[DataRequired(), Length(min=3, max=100)])
     category = StringField("Category", validators=[Optional()])
+    description = StringField("Description", validators=[Optional(), Length(max=255)])
     qty = IntegerField("Quantity", validators=[DataRequired(), NumberRange(min=0)])
     price = FloatField("Price", validators=[DataRequired(), NumberRange(min=0)])
+    is_bulk = BooleanField("This is a bulk product (package)")
+    pack_size = IntegerField("Items per Pack", default=1, validators=[NumberRange(min=1)])
+    parent_id = SelectField("Base Product (Loose Item)", coerce=int, validators=[Optional()])
     submit = SubmitField("Add Product")
+
+    def __init__(self, *args, **kwargs):
+        super(ProductAddForm, self).__init__(*args, **kwargs)
+        # Populate parent_id choices with non-bulk products
+        base_products = execute_query("SELECT id, name FROM products WHERE is_bulk = 0 ORDER BY name;", fetch=True)
+        self.parent_id.choices = [(0, "--- Select a Base Product ---")] + [(p[0], p[1]) for p in base_products]
+
 
     def validate_name(self, name):
         """Check if product with same name and category already exists."""
@@ -85,9 +96,18 @@ class ProductUpdateForm(FlaskForm):
     id = IntegerField("Product ID", validators=[DataRequired()])
     name = StringField("Name", validators=[DataRequired(), Length(min=3, max=100)])
     category = StringField("Category", validators=[Optional()])
+    description = StringField("Description", validators=[Optional(), Length(max=255)])
     qty = IntegerField("Quantity", validators=[DataRequired(), NumberRange(min=0)])
     price = FloatField("Price", validators=[DataRequired(), NumberRange(min=0)])
+    is_bulk = BooleanField("This is a bulk product (package)")
+    pack_size = IntegerField("Items per Pack", default=1, validators=[NumberRange(min=1)])
+    parent_id = SelectField("Base Product (Loose Item)", coerce=int, validators=[Optional()])
     submit = SubmitField("Update Product")
+
+    def __init__(self, *args, **kwargs):
+        super(ProductUpdateForm, self).__init__(*args, **kwargs)
+        base_products = execute_query("SELECT id, name FROM products WHERE is_bulk = 0 ORDER BY name;", fetch=True)
+        self.parent_id.choices = [(0, "--- Select a Base Product ---")] + [(p[0], p[1]) for p in base_products]
 
 class ProductDeleteForm(FlaskForm):
     action = HiddenField(default="delete")
@@ -136,13 +156,13 @@ class ItemForm(FlaskForm):
     pid = IntegerField("Product ID", validators=[DataRequired()])
     qty = IntegerField("Quantity", validators=[DataRequired(), NumberRange(min=1)])
     price = FloatField("Price", validators=[DataRequired(), NumberRange(min=0)])
-
+ 
 class InvoiceAddForm(FlaskForm):
     action = HiddenField(default="add")
-    customer_id = IntegerField("Customer ID", validators=[DataRequired()])
-    items = FieldList(FormField(ItemForm), min_entries=1, max_entries=10)
+    customer_id = IntegerField("Customer ID", validators=[Optional()]) # Made optional to support walk-in
+    items = FieldList(FormField(ItemForm), min_entries=1, max_entries=20)
     submit = SubmitField("Create Invoice")
-    
+ 
 class InvoiceUpdateForm(FlaskForm):
     action = HiddenField(default="update")
     id = IntegerField("Invoice ID", validators=[DataRequired()])
@@ -150,7 +170,7 @@ class InvoiceUpdateForm(FlaskForm):
     total = FloatField("Total", validators=[DataRequired()], default=0.0)
     date = DateField("Date", validators=[DataRequired()], format='%Y-%m-%d', default=datetime.now())
     submit = SubmitField("Update Invoice")
-
+ 
 class InvoiceDeleteForm(FlaskForm):
     action = HiddenField(default="delete")
     id = IntegerField("Invoice ID", validators=[DataRequired()])
