@@ -167,6 +167,11 @@
                             <a class="nav-link {% if 'invoice' in request.path %}active{% endif %}" 
                                href="{{ url_for('main.invoices') }}">Invoices</a>
                         </li>
+                        <li class="nav-item">
+                           <a class="nav-link {% if 'receiving' in request.path %}active{% endif %}" 
+                                href="{{ url_for('receiving.index') }}">
+                                <i class="bi bi-box-seam"></i> Receiving</a>
+                        </li>
                         {# <li class="nav-item">
                             <a class="nav-link {% if 'payroll' in request.path %}active{% endif %}" 
                                href="{{ url_for('main.payrolls') }}">Payroll</a>

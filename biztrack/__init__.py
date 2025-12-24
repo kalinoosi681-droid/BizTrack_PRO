@@ -56,6 +56,10 @@ def create_app(config_name='development'):
     app.register_blueprint(auth_bp)
     app.register_blueprint(ai_bp)
     
+    # AFTER: app.register_blueprint(ai_bp)
+    from .receiving_routes import receiving_bp
+    app.register_blueprint(receiving_bp)
+    
     # Register teardown handler for database connections
     from .biztrack_db import close_connection
     app.teardown_appcontext(close_connection)

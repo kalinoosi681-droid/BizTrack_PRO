@@ -106,6 +106,18 @@ h1, h2, h3, h4, h5, h6 {
     letter-spacing: -0.3px;
 }
 
+.form-label {
+    color: var(--bs-emphasis-color);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+/* Form helper text */
+.form-text {
+    opacity: 0.8;
+}
+
+
 /* ========================================
    CARD ENHANCEMENTS
    ======================================== */
@@ -173,15 +185,32 @@ h1, h2, h3, h4, h5, h6 {
 .form-control,
 .form-select {
     border-radius: var(--border-radius-sm);
-    border: 1px solid var(--bs-border-color);
+    border: 1px solid var(--bs-border-color) !important;
     padding: 0.625rem 1rem;
     transition: border-color 0.3s, box-shadow 0.3s;
+    background-color: var(--bs-body-bg) !important;
+    color: var(--bs-body-color) !important;
 }
 
 .form-control:focus,
 .form-select:focus {
     border-color: #667eea;
     box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.form-control[readonly] {
+    background-color: var(--bs-secondary-bg) !important;
+    opacity: 0.8;
+}
+
+textarea.form-control {
+    min-height: 80px;
+    resize: vertical;
+}
+
+/* Notes field in receiving form */
+#notes {
+    min-height: 60px !important;
 }
 
 .input-group-text {
@@ -199,12 +228,14 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .table thead th {
-    border-bottom: 2px solid var(--bs-border-color);
-    font-weight: 600;
+    border-bottom: 2px solid var(--bs-border-color) !important;
+    font-weight: 700 !important;
     text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 1px;
-    padding: 1rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    padding: 1rem !important;
+    background-color: var(--bs-secondary-bg) !important;
+    color: var(--bs-emphasis-color) !important;
 }
 
 .table tbody tr {
@@ -225,10 +256,17 @@ h1, h2, h3, h4, h5, h6 {
 
 .badge {
     border-radius: var(--border-radius-sm);
-    padding: 0.375rem 0.75rem;
-    font-weight: 500;
+    padding: 0.375rem 0.75rem !important;
+    font-weight: 600 !important;
     letter-spacing: 0.3px;
 }
+
+/* Secondary badges need better contrast */
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+    color: #fff !important;
+}
+
 
 /* ========================================
    PROGRESS BAR
@@ -258,94 +296,6 @@ h1, h2, h3, h4, h5, h6 {
     padding: 1.25rem 1rem;
 }
 
-/* ========================================
-   AI CHAT WIDGET STYLES
-   ======================================== */
-
-#ai-chat-toggle-btn {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: var(--primary-gradient);
-    border: none;
-    box-shadow: var(--shadow-lg);
-    transition: all 0.3s ease;
-}
-
-#ai-chat-toggle-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 1rem 3rem rgba(102, 126, 234, 0.4);
-}
-
-#ai-chat-widget {
-    box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.2);
-}
-
-.chat-message {
-    animation: messageSlideIn 0.3s ease-out;
-}
-
-@keyframes messageSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.chat-bubble {
-    border-radius: 1rem;
-    padding: 0.75rem 1rem;
-    max-width: 80%;
-    word-wrap: break-word;
-}
-
-.user-bubble {
-    background: var(--primary-gradient);
-    color: white;
-    border-bottom-right-radius: 0.25rem;
-}
-
-.ai-bubble {
-    background-color: var(--bs-secondary-bg);
-    border-bottom-left-radius: 0.25rem;
-}
-
-.typing-indicator {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem 1rem;
-}
-
-.typing-indicator span {
-    width: 8px;
-    height: 8px;
-    background-color: var(--bs-secondary);
-    border-radius: 50%;
-    animation: typingBounce 1.4s infinite;
-}
-
-.typing-indicator span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.typing-indicator span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-@keyframes typingBounce {
-    0%, 60%, 100% {
-        transform: translateY(0);
-    }
-    30% {
-        transform: translateY(-10px);
-    }
-}
-
 .welcome-message {
     text-align: center;
     padding: 1rem;
@@ -373,12 +323,21 @@ h1, h2, h3, h4, h5, h6 {
     padding: 0.5rem;
 }
 
+.dropdown-menu .dropdown-item {
+    color: var(--bs-body-color) !important;
+    background-color: transparent;
+    padding: 0.75rem 1rem;
+    border-radius: var(--border-radius-sm);
+    transition: background-color 0.2s, transform 0.2s;
+}
+
 .dropdown-item {
     border-radius: var(--border-radius-sm);
     padding: 0.625rem 1rem;
     transition: background-color 0.2s, transform 0.2s;
 }
 
+.dropdown-menu .dropdown-item:hover,
 .dropdown-item:hover {
     background-color: var(--bs-secondary-bg);
     transform: translateX(3px);
@@ -537,6 +496,15 @@ h1, h2, h3, h4, h5, h6 {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
+[data-bs-theme="dark"] .form-control[readonly] {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+[data-bs-theme="dark"] .badge.bg-secondary {
+    background-color: #495057 !important;
+}
+
+
 /* ========================================
    RESPONSIVE DESIGN
    ======================================== */
@@ -554,10 +522,73 @@ h1, h2, h3, h4, h5, h6 {
         padding: 0.5rem 1rem;
     }
     
+    /* Hide unnecessary elements */
+    .no-print,
+    #ai-chat-widget,
+    #ai-chat-toggle-btn,
+    .navbar,
+    footer {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
     #ai-chat-toggle-btn {
         width: 50px;
         height: 50px;
     }
+    
+    .table thead th {
+        font-size: 0.75rem;
+        padding: 0.75rem 0.5rem !important;
+    }
+    
+    .form-label {
+        font-size: 0.875rem;
+    }
+}
+
+/* ========================================
+   RECEIVING MODULE SPECIFIC
+   ======================================== */
+
+/* Supplier information card background */
+.card.bg-light {
+    background-color: var(--bs-secondary-bg) !important;
+}
+
+[data-bs-theme="dark"] .card.bg-light {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Category margins table */
+#receiving .table tbody td {
+    color: var(--bs-body-color) !important;
+}
+
+/* Product info display card */
+#product-info-card {
+    background-color: var(--bs-info-bg-subtle) !important;
+    border: 1px solid var(--bs-info-border-subtle) !important;
+    color: var(--bs-emphasis-color) !important;
+}
+
+[data-bs-theme="dark"] #product-info-card {
+    background-color: rgba(13, 202, 240, 0.1) !important;
+    border-color: rgba(13, 202, 240, 0.2) !important;
+    color: #fff !important;
+}
+
+/* Cost summary card */
+#cost-summary {
+    background-color: var(--bs-secondary-bg) !important;
+}
+
+[data-bs-theme="dark"] #cost-summary {
+    background-color: rgba(255, 255, 255, 0.05) !important;
 }
 
 /* ========================================
@@ -578,4 +609,36 @@ h1, h2, h3, h4, h5, h6 {
         box-shadow: none;
         border: 1px solid #000;
     }
+
+    .form-control,
+    .form-select {
+        border: 1px solid #000 !important;
+        color: #000 !important;
+    }
+    
+    .table thead th {
+        background-color: #f8f9fa !important;
+        color: #000 !important;
+        border: 1px solid #000 !important;
+    }
+}
+
+/* ========================================
+   DARK MODE SPECIFIC OVERRIDES
+   ======================================== */
+
+[data-bs-theme="dark"] .table thead th {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: #fff !important;
+    border-bottom-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+[data-bs-theme="dark"] .dropdown-menu .dropdown-item:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-bs-theme="dark"] .form-control, [data-bs-theme="dark"] .form-select {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: #fff !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
 }

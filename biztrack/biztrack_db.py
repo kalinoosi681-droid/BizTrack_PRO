@@ -336,12 +336,117 @@ def init_db() -> None:
         cur.execute("CREATE TRIGGER IF NOT EXISTS products_after_insert AFTER INSERT ON products BEGIN INSERT INTO products_fts(rowid, name, category) VALUES (new.id, new.name, new.category); END;")
         cur.execute("CREATE TRIGGER IF NOT EXISTS products_after_delete AFTER DELETE ON products BEGIN INSERT INTO products_fts(products_fts, rowid, name, category) VALUES ('delete', old.id, old.name, old.category); END;")
         cur.execute("CREATE TRIGGER IF NOT EXISTS products_after_update AFTER UPDATE ON products BEGIN INSERT INTO products_fts(products_fts, rowid, name, category) VALUES ('delete', old.id, old.name, old.category); INSERT INTO products_fts(rowid, name, category) VALUES (new.id, new.name, new.category); END;")
+
+        # Category Profit Margins Configuration
+        cur.execute("""CREATE TABLE IF NOT EXISTS category_margins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_name TEXT UNIQUE NOT NULL,
+        profit_margin_percent REAL NOT NULL DEFAULT 25.0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_by INTEGER,
+        FOREIGN KEY(updated_by) REFERENCES users(id)
+        );""")
+
+        # Receiving Transactions (Stock IN)
+        cur.execute("""CREATE TABLE IF NOT EXISTS receiving_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        quantity_received INTEGER NOT NULL,
+        cost_price REAL NOT NULL,
+        selling_price REAL NOT NULL,
+        margin_percentage REAL NOT NULL,
+        total_cost REAL NOT NULL,
+        total_value REAL NOT NULL,
+        supplier_name TEXT,
+        supplier_phone TEXT,
+        invoice_number TEXT,
+        notes TEXT,
+        received_by INTEGER NOT NULL,
+        received_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_opening_stock INTEGER DEFAULT 0,
+        FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
+        FOREIGN KEY(received_by) REFERENCES users(id)
+        );""")
+
+        # Cost Price History (Track price changes)
+        cur.execute("""CREATE TABLE IF NOT EXISTS cost_price_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        old_cost_price REAL,
+        new_cost_price REAL NOT NULL,
+        price_change_percent REAL,
+        changed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        changed_by INTEGER,
+        FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
+        FOREIGN KEY(changed_by) REFERENCES users(id)
+        );""")
+
+        # Suppliers (Optional tracking)
+        cur.execute("""CREATE TABLE IF NOT EXISTS suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        phone TEXT,
+        email TEXT,
+        address TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        total_supplies INTEGER DEFAULT 0,
+        last_supply_date TIMESTAMP
+        );""")
+
+        # Indexes for performance
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_receiving_product ON receiving_transactions(product_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_receiving_date ON receiving_transactions(received_date);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_receiving_user ON receiving_transactions(received_by);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_cost_history_product ON cost_price_history(product_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);")
+
+        # Seed default category margins
+        cur.execute("""INSERT OR IGNORE INTO category_margins (category_name, profit_margin_percent) VALUES
+       ('Cosmetic', 30.0),
+       ('Flour', 10.0),
+       ('Fridger', 25.0),
+       ('Meat', 25.0),
+       ('Snacks', 30.0),
+       ('Dairy', 25.0),
+       ('Food', 25.0),
+       ('Fruits', 25.0),
+       ('Vegetables', 25.0),
+       ('Drinks', 25.0),
+       ('Beverages', 25.0),
+       ('Health', 25.0),
+       ('Stationery', 25.0),
+       ('Electronics', 35.0),
+       ('Home', 30.0),
+       ('Cleaning', 25.0),
+       ('Clothing', 35.0),
+       ('School', 25.0),
+       ('Uncategorized', 25.0);""")
+
+        # Trigger to track cost price changes
+        cur.execute("""CREATE TRIGGER IF NOT EXISTS track_cost_changes
+      AFTER INSERT ON receiving_transactions
+      FOR EACH ROW
+      BEGIN
+      INSERT INTO cost_price_history (product_id, old_cost_price, new_cost_price, price_change_percent, changed_by)
+      SELECT 
+        NEW.product_id,
+        (SELECT last_cost_price FROM products WHERE id = NEW.product_id),
+        NEW.cost_price,
+        CASE 
+            WHEN (SELECT last_cost_price FROM products WHERE id = NEW.product_id) > 0 
+            THEN ((NEW.cost_price - (SELECT last_cost_price FROM products WHERE id = NEW.product_id)) / 
+                  (SELECT last_cost_price FROM products WHERE id = NEW.product_id) * 100)
+            ELSE 0
+        END,
+        NEW.received_by;
+    END;""")
+
         conn.commit()
+        logger.info("Database initialized successfully")
     finally:
         cur.close()
 
-    logger.info("Database initialized successfully")    
-    
 # ============================
 
 def migrate_schema() -> None:
@@ -387,6 +492,24 @@ def migrate_schema() -> None:
                 logger.info("Adding parent_id column to products table")
                 cur.execute("ALTER TABLE products ADD COLUMN parent_id INTEGER REFERENCES products(id) ON DELETE SET NULL;")
                 logger.info("✅ Added parent_id to products")
+
+            # NEW: Check and add receiving-related columns to products
+            if 'last_cost_price' not in products_cols:
+                logger.info("Adding last_cost_price column to products table")
+                cur.execute("ALTER TABLE products ADD COLUMN last_cost_price REAL DEFAULT 0.0;")
+                logger.info("✅ Added last_cost_price to products")
+
+            if 'last_received_date' not in products_cols:
+                logger.info("Adding last_received_date column to products table")
+                cur.execute("ALTER TABLE products ADD COLUMN last_received_date TIMESTAMP;")
+                logger.info("✅ Added last_received_date to products")
+
+            if 'manual_edit_locked' not in products_cols:
+                logger.info("Adding manual_edit_locked column to products table")
+                cur.execute("ALTER TABLE products ADD COLUMN manual_edit_locked INTEGER DEFAULT 1;")
+                logger.info("✅ Added manual_edit_locked to products")
+
+
             
             # Check if metrics tables exist, create if missing
             cur.execute("""

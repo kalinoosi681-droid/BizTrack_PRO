@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Receiving Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="page-title mb-0">
+    <i class="bi bi-box-seam-fill me-2"></i>Stock Receiving Dashboard
+  </h1>
+  <div class="btn-group">
+    <a href="{{ url_for('receiving.receive_stock') }}" class="btn btn-primary">
+      <i class="bi bi-plus-circle me-2"></i>Receive Stock
+    </a>
+    <a href="{{ url_for('receiving.history') }}" class="btn btn-outline-primary">
+      <i class="bi bi-clock-history me-2"></i>History
+    </a>
+    <a href="{{ url_for('receiving.manage_margins') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-percent me-2"></i>Margins
+    </a>
+  </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-3 col-md-6">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #0d6efd !important;">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <p class="text-muted text-uppercase mb-1" style="font-size: 0.75rem;">Transactions (30d)</p>
+            <h3 class="fw-bold mb-0">{{ stats.total_transactions }}</h3>
+          </div>
+          <div class="bg-primary bg-opacity-10 p-3 rounded">
+            <i class="bi bi-receipt text-primary" style="font-size: 1.5rem;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-3 col-md-6">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #198754 !important;">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <p class="text-muted text-uppercase mb-1" style="font-size: 0.75rem;">Total Quantity</p>
+            <h3 class="fw-bold mb-0">{{ stats.total_quantity }}</h3>
+          </div>
+          <div class="bg-success bg-opacity-10 p-3 rounded">
+            <i class="bi bi-boxes text-success" style="font-size: 1.5rem;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-3 col-md-6">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #ffc107 !important;">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <p class="text-muted text-uppercase mb-1" style="font-size: 0.75rem;">Total Value</p>
+            <h3 class="fw-bold mb-0">M{{ "%.2f"|format(stats.total_value) }}</h3>
+          </div>
+          <div class="bg-warning bg-opacity-10 p-3 rounded">
+            <i class="bi bi-currency-exchange text-warning" style="font-size: 1.5rem;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-3 col-md-6">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #6f42c1 !important;">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <p class="text-muted text-uppercase mb-1" style="font-size: 0.75rem;">Unique Products</p>
+            <h3 class="fw-bold mb-0">{{ stats.unique_products }}</h3>
+          </div>
+          <div class="bg-purple bg-opacity-10 p-3 rounded">
+            <i class="bi bi-box text-purple" style="font-size: 1.5rem; color: #6f42c1;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Recent Transactions -->
+  <div class="col-lg-8">
+    <div class="card shadow-sm border-0" style="border-radius: 1rem;">
+      <div class="card-header bg-primary text-white border-0 d-flex justify-content-between align-items-center" style="border-radius: 1rem 1rem 0 0;">
+        <span>
+          <i class="bi bi-clock-history me-2"></i>Recent Receiving Transactions
+        </span>
+        <a href="{{ url_for('receiving.history') }}" class="btn btn-sm btn-light">View All</a>
+      </div>
+      <div class="card-body p-0">
+        {% if transactions %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Product</th>
+                <th class="text-center">Qty</th>
+                <th class="text-end">Cost</th>
+                <th class="text-end">Price</th>
+                <th>Supplier</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in transactions[:10] %}
+              <tr>
+                <td>
+                  <small class="text-muted">{{ t.received_date.split('.')[0] }}</small>
+                </td>
+                <td class="fw-semibold">{{ t.product_name }}</td>
+                <td class="text-center">
+                  <span class="badge bg-info">{{ t.quantity_received }}</span>
+                </td>
+                <td class="text-end text-muted">M{{ "%.2f"|format(t.cost_price) }}</td>
+                <td class="text-end text-success fw-bold">M{{ "%.2f"|format(t.selling_price) }}</td>
+                <td><small>{{ t.supplier_name }}</small></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+          <i class="bi bi-inbox" style="font-size: 3rem; color: #dee2e6;"></i>
+          <p class="text-muted mt-3">No receiving transactions yet</p>
+          <a href="{{ url_for('receiving.receive_stock') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-2"></i>Receive First Stock
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Low Stock Alerts -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-warning" style="border-radius: 1rem; border-width: 2px;">
+      <div class="card-header bg-warning text-dark border-0" style="border-radius: 1rem 1rem 0 0;">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Low Stock Alerts</strong>
+      </div>
+      <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+        {% if low_stock %}
+        <div class="list-group list-group-flush">
+          {% for p in low_stock %}
+          <div class="list-group-item px-0 border-0">
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="flex-grow-1">
+                <h6 class="mb-1">{{ p.name }}</h6>
+                <small class="text-muted">Stock: {{ p.qty }} / Threshold: {{ p.threshold }}</small>
+              </div>
+              <a href="{{ url_for('receiving.receive_stock') }}?product_id={{ p.id }}" 
+                 class="btn btn-sm btn-outline-warning">
+                <i class="bi bi-arrow-repeat"></i>
+              </a>
+            </div>
+            <div class="progress mt-2" style="height: 6px;">
+              {% set percent = (p.qty / p.threshold * 100) if p.threshold > 0 else 0 %}
+              <div class="progress-bar bg-danger" style="width: {{ percent }}%"></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+          <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+          <p class="text-muted mt-3 mb-0">All stock levels healthy!</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

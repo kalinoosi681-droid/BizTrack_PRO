@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Receiving History{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <a href="{{ url_for('receiving.index') }}" class="btn btn-outline-secondary mb-2">
+      <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+    </a>
+    <h1 class="page-title mb-0">
+      <i class="bi bi-clock-history me-2"></i>Receiving History
+    </h1>
+  </div>
+  <a href="{{ url_for('receiving.export_history') }}" class="btn btn-success">
+    <i class="bi bi-download me-2"></i>Export CSV
+  </a>
+</div>
+
+<!-- Filters -->
+<div class="card shadow-sm border-0 mb-4" style="border-radius: 1rem;">
+  <div class="card-header bg-light border-0" style="border-radius: 1rem 1rem 0 0;">
+    <i class="bi bi-funnel me-2"></i>Filters
+  </div>
+  <div class="card-body">
+    <form method="GET" id="filter-form">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">From Date</label>
+          {{ filter_form.start_date(class="form-control") }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">To Date</label>
+          {{ filter_form.end_date(class="form-control") }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Product ID</label>
+          {{ filter_form.product_id(class="form-control", placeholder="Filter by product") }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Supplier</label>
+          {{ filter_form.supplier_name(class="form-control", placeholder="Filter by supplier") }}
+        </div>
+      </div>
+      <div class="mt-3">
+        {{ filter_form.submit(class="btn btn-primary") }}
+        <a href="{{ url_for('receiving.history') }}" class="btn btn-outline-secondary">Clear Filters</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Transactions Table -->
+<div class="card shadow-sm border-0" style="border-radius: 1rem;">
+  <div class="card-header bg-primary text-white border-0 d-flex justify-content-between align-items-center" style="border-radius: 1rem 1rem 0 0;">
+    <span>
+      <i class="bi bi-list-ul me-2"></i>Receiving Transactions ({{ transactions|length }} results)
+    </span>
+    <span class="badge bg-light text-primary">Last 500</span>
+  </div>
+  <div class="card-body p-0">
+    {% if transactions %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Date & Time</th>
+            <th>Product</th>
+            <th>Category</th>
+            <th class="text-center">Qty</th>
+            <th class="text-end">Cost Price</th>
+            <th class="text-end">Selling Price</th>
+            <th class="text-center">Margin</th>
+            <th class="text-end">Total Cost</th>
+            <th>Supplier</th>
+            <th>Received By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transactions %}
+          <tr>
+            <td><span class="badge bg-secondary">#{{ t.id }}</span></td>
+            <td>
+              <small class="d-block">{{ t.received_date.split(' ')[0] }}</small>
+              <small class="text-muted">{{ t.received_date.split(' ')[1].split('.')[0] }}</small>
+            </td>
+            <td class="fw-semibold">{{ t.product_name }}</td>
+            <td><span class="badge bg-info">{{ t.category }}</span></td>
+            <td class="text-center">
+              <span class="badge bg-primary">{{ t.quantity_received }}</span>
+            </td>
+            <td class="text-end text-muted">M{{ "%.2f"|format(t.cost_price) }}</td>
+            <td class="text-end text-success fw-bold">M{{ "%.2f"|format(t.selling_price) }}</td>
+            <td class="text-center">
+              {% set margin = t.margin_percentage %}
+              {% if margin >= 30 %}
+                <span class="badge bg-success">{{ "%.1f"|format(margin) }}%</span>
+              {% elif margin >= 20 %}
+                <span class="badge bg-primary">{{ "%.1f"|format(margin) }}%</span>
+              {% elif margin >= 10 %}
+                <span class="badge bg-warning text-dark">{{ "%.1f"|format(margin) }}%</span>
+              {% else %}
+                <span class="badge bg-danger">{{ "%.1f"|format(margin) }}%</span>
+              {% endif %}
+            </td>
+            <td class="text-end fw-bold">M{{ "%.2f"|format(t.total_cost) }}</td>
+            <td>
+              <small>{{ t.supplier_name }}</small>
+              {% if t.invoice_number != 'N/A' %}
+                <br><small class="text-muted">Inv: {{ t.invoice_number }}</small>
+              {% endif %}
+            </td>
+            <td><small class="text-muted">{{ t.received_by_name }}</small></td>
+          </tr>
+          {% if t.notes %}
+          <tr class="table-light">
+            <td colspan="11" class="ps-5">
+              <small class="text-muted">
+                <i class="bi bi-sticky me-1"></i><strong>Notes:</strong> {{ t.notes }}
+              </small>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+      <i class="bi bi-inbox" style="font-size: 3rem; color: #dee2e6;"></i>
+      <p class="text-muted mt-3">No transactions found matching your filters</p>
+      <a href="{{ url_for('receiving.receive_stock') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>Receive Stock
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Summary Statistics -->
+{% if transactions %}
+<div class="row g-4 mt-4">
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #0d6efd !important;">
+      <div class="card-body text-center">
+        <h6 class="text-muted text-uppercase mb-2" style="font-size: 0.75rem;">Total Transactions</h6>
+        <h3 class="fw-bold mb-0">{{ transactions|length }}</h3>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #198754 !important;">
+      <div class="card-body text-center">
+        <h6 class="text-muted text-uppercase mb-2" style="font-size: 0.75rem;">Total Quantity</h6>
+        <h3 class="fw-bold mb-0">
+          {% set total_qty = transactions|sum(attribute='quantity_received') %}
+          {{ total_qty }}
+        </h3>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #dc3545 !important;">
+      <div class="card-body text-center">
+        <h6 class="text-muted text-uppercase mb-2" style="font-size: 0.75rem;">Total Cost</h6>
+        <h3 class="fw-bold mb-0 text-danger">
+          {% set total_cost = transactions|sum(attribute='total_cost') %}
+          M{{ "%.2f"|format(total_cost) }}
+        </h3>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #198754 !important;">
+      <div class="card-body text-center">
+        <h6 class="text-muted text-uppercase mb-2" style="font-size: 0.75rem;">Total Value</h6>
+        <h3 class="fw-bold mb-0 text-success">
+          {% set total_value = transactions|sum(attribute='total_value') %}
+          M{{ "%.2f"|format(total_value) }}
+        </h3>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Profit Analysis -->
+<div class="card shadow-sm border-0 mt-4" style="border-radius: 1rem;">
+  <div class="card-header bg-success text-white border-0" style="border-radius: 1rem 1rem 0 0;">
+    <i class="bi bi-graph-up me-2"></i>Profit Analysis
+  </div>
+  <div class="card-body">
+    <div class="row text-center">
+      <div class="col-md-4">
+        <h6 class="text-muted text-uppercase mb-2" style="font-size: 0.75rem;">Expected Profit</h6>
+        <h3 class="fw-bold mb-0 text-success">
+          {% set expected_profit = total_value - total_cost %}
+          M{{ "%.2f"|format(expected_profit) }}
+        </h3>
+        <small class="text-muted">If all items sell at current price</small>
+      </div>
+      <div class="col-md-4">
+        <h6 class="text-muted text-uppercase mb-2" style="font-size: 0.75rem;">Average Margin</h6>
+        <h3 class="fw-bold mb-0 text-primary">
+          {% set avg_margin = transactions|sum(attribute='margin_percentage') / transactions|length %}
+          {{ "%.1f"|format(avg_margin) }}%
+        </h3>
+        <small class="text-muted">Across all transactions</small>
+      </div>
+      <div class="col-md-4">
+        <h6 class="text-muted text-uppercase mb-2" style="font-size: 0.75rem;">ROI</h6>
+        <h3 class="fw-bold mb-0 text-info">
+          {% set roi = (expected_profit / total_cost * 100) if total_cost > 0 else 0 %}
+          {{ "%.1f"|format(roi) }}%
+        </h3>
+        <small class="text-muted">Return on investment</small>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-submit form when date changes
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    dateInputs.forEach(input => {
+        input.addEventListener('change', function() {
+            // Optional: auto-submit on date change
+            // document.getElementById('filter-form').submit();
+        });
+    });
+    
+    // Highlight current filters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.toString()) {
+        const filterCard = document.querySelector('.card-header');
+        if (filterCard) {
+            filterCard.classList.add('bg-warning', 'text-dark');
+            filterCard.classList.remove('bg-light');
+            
+            const icon = filterCard.querySelector('i');
+            if (icon) {
+                icon.classList.add('bi-funnel-fill');
+                icon.classList.remove('bi-funnel');
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

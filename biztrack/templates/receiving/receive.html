@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Receive Stock{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <a href="{{ url_for('receiving.index') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+  </a>
+</div>
+
+<h1 class="page-title mb-4">
+  <i class="bi bi-box-seam-fill me-2"></i>Receive Stock
+</h1>
+
+<div class="row">
+  <div class="col-lg-8">
+    <div class="card shadow-sm border-0" style="border-radius: 1rem;">
+      <div class="card-header bg-primary text-white border-0" style="border-radius: 1rem 1rem 0 0;">
+        <i class="bi bi-plus-circle me-2"></i>Stock Receiving Form
+      </div>
+      <div class="card-body p-4">
+        <form method="POST" id="receiving-form">
+          {{ form.hidden_tag() }}
+          
+          <!-- Product Search & Selection -->
+          <div class="row mb-4">
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-search me-1"></i>Search Product
+              </label>
+              <div class="position-relative">
+                <input type="text" id="product-search" class="form-control form-control-lg" 
+                       placeholder="Type product name or ID..." autocomplete="off">
+                <div id="product-suggest" class="dropdown-menu w-100" 
+                     style="max-height: 300px; overflow-y: auto; z-index: 1055;"></div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-hash me-1"></i>Product ID
+              </label>
+              {{ form.product_id(class="form-control form-control-lg", id="product-id", readonly=True) }}
+            </div>
+          </div>
+
+          <!-- Product Info Display -->
+          <div class="alert alert-info border-0" id="product-info-card" style="display: none; border-radius: 0.75rem;">
+            <div class="row">
+              <div class="col-md-4">
+                <strong>Product:</strong><br>
+                <span id="product-name-display">-</span>
+              </div>
+              <div class="col-md-4">
+                <strong>Category:</strong><br>
+                <span id="category-display">-</span>
+              </div>
+              <div class="col-md-4">
+                <strong>Current Stock:</strong><br>
+                <span id="current-stock-display" class="badge bg-info fs-6">-</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quantity & Pricing -->
+          <div class="row mb-4">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-box-seam me-1"></i>Quantity Received *
+              </label>
+              {{ form.quantity_received(class="form-control form-control-lg", id="quantity-received") }}
+              <small class="form-text text-muted">Units being restocked</small>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-cash-coin me-1"></i>Cost Price (M) *
+              </label>
+              {{ form.cost_price(class="form-control form-control-lg", id="cost-price") }}
+              <small class="form-text text-muted">Purchase price per unit</small>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-tag-fill me-1"></i>Selling Price (M) *
+              </label>
+              {{ form.selling_price(class="form-control form-control-lg", id="selling-price") }}
+              <small class="form-text text-success" id="margin-display">Auto-calculated</small>
+            </div>
+          </div>
+
+          <!-- Price Override -->
+          <div class="mb-4">
+            <div class="form-check form-switch">
+              {{ form.override_price(class="form-check-input", id="override-price") }}
+              <label class="form-check-label" for="override-price">
+                <i class="bi bi-pencil-square me-1"></i>Override Calculated Price (Manual Entry)
+              </label>
+            </div>
+          </div>
+
+          <!-- Cost Summary -->
+          <div class="card bg-light border-0 mb-4" id="cost-summary" style="display: none; border-radius: 0.75rem;">
+            <div class="card-body">
+              <div class="row text-center">
+                <div class="col-4">
+                  <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.75rem;">Total Cost</h6>
+                  <h4 class="fw-bold mb-0 text-danger" id="total-cost-display">M0.00</h4>
+                </div>
+                <div class="col-4">
+                  <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.75rem;">Total Value</h6>
+                  <h4 class="fw-bold mb-0 text-success" id="total-value-display">M0.00</h4>
+                </div>
+                <div class="col-4">
+                  <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.75rem;">Profit Margin</h6>
+                  <h4 class="fw-bold mb-0 text-primary" id="profit-margin-display">0%</h4>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Supplier Information (Optional) -->
+          <div class="card border-0 bg-light mb-4" style="border-radius: 0.75rem;">
+            <div class="card-header bg-transparent border-0">
+              <h6 class="mb-0 fw-semibold">
+                <i class="bi bi-truck me-2"></i>Supplier Information (Optional)
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Supplier Name</label>
+                  {{ form.supplier_name(class="form-control", id="supplier-name") }}
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Supplier Phone</label>
+                  {{ form.supplier_phone(class="form-control", id="supplier-phone") }}
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Supplier Invoice #</label>
+                  {{ form.invoice_number(class="form-control", id="invoice-number") }}
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Notes</label>
+                  {{ form.notes(class="form-control", id="notes", rows="1") }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="d-grid gap-2">
+            {{ form.submit(class="btn btn-primary btn-lg", id="submit-btn") }}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Reference -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-0 mb-4" style="border-radius: 1rem;">
+      <div class="card-header bg-info text-white border-0" style="border-radius: 1rem 1rem 0 0;">
+        <i class="bi bi-info-circle me-2"></i>Category Margins
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-sm table-borderless mb-0">
+            <tbody>
+              <tr><td>Cosmetic</td><td class="text-end fw-bold">30%</td></tr>
+              <tr><td>Flour</td><td class="text-end fw-bold">10%</td></tr>
+              <tr><td>Fridger (Meat)</td><td class="text-end fw-bold">25%</td></tr>
+              <tr><td>Snacks</td><td class="text-end fw-bold">30%</td></tr>
+              <tr><td>Dairy</td><td class="text-end fw-bold">25%</td></tr>
+              <tr><td>Food/Drinks</td><td class="text-end fw-bold">25%</td></tr>
+              <tr><td>Fruits/Veggies</td><td class="text-end fw-bold">25%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <hr>
+        <a href="{{ url_for('receiving.manage_margins') }}" class="btn btn-sm btn-outline-info w-100">
+          <i class="bi bi-gear me-1"></i>Manage Margins
+        </a>
+      </div>
+    </div>
+
+    <!-- Quick Tips -->
+    <div class="card shadow-sm border-0" style="border-radius: 1rem;">
+      <div class="card-header bg-success text-white border-0" style="border-radius: 1rem 1rem 0 0;">
+        <i class="bi bi-lightbulb me-2"></i>Quick Tips
+      </div>
+      <div class="card-body">
+        <ul class="mb-0 ps-3">
+          <li class="mb-2">Selling price is <strong>auto-calculated</strong> based on category margin</li>
+          <li class="mb-2">Check <strong>Override Price</strong> to manually enter selling price</li>
+          <li class="mb-2">Stock quantity <strong>increases automatically</strong> after receiving</li>
+          <li class="mb-2">Supplier info is <strong>optional</strong> but recommended for tracking</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/receiving.js') }}"></script>
+{% endblock %}

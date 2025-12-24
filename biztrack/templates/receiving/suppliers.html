@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Supplier Management{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <a href="{{ url_for('receiving.index') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+  </a>
+</div>
+
+<h1 class="page-title mb-4">
+  <i class="bi bi-truck me-2"></i>Supplier Management
+</h1>
+
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="alert alert-info border-0" style="border-radius: 0.75rem;">
+      <i class="bi bi-info-circle-fill me-2"></i>
+      Suppliers are automatically created/updated when you include supplier information in receiving transactions.
+    </div>
+  </div>
+</div>
+
+<!-- Suppliers Table -->
+<div class="card shadow-sm border-0" style="border-radius: 1rem;">
+  <div class="card-header bg-primary text-white border-0 d-flex justify-content-between align-items-center" style="border-radius: 1rem 1rem 0 0;">
+    <span>
+      <i class="bi bi-list-ul me-2"></i>Supplier Directory ({{ suppliers|length }} suppliers)
+    </span>
+  </div>
+  <div class="card-body p-0">
+    {% if suppliers %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Supplier Name</th>
+            <th>Contact</th>
+            <th>Address</th>
+            <th class="text-center">Total Supplies</th>
+            <th>Last Supply Date</th>
+            <th class="text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in suppliers %}
+          <tr>
+            <td><span class="badge bg-secondary">#{{ s.id }}</span></td>
+            <td class="fw-semibold">
+              <i class="bi bi-building me-2 text-primary"></i>{{ s.name }}
+            </td>
+            <td>
+              <div>
+                {% if s.phone != 'N/A' %}
+                  <i class="bi bi-telephone me-1 text-muted"></i>
+                  <a href="tel:{{ s.phone }}" class="text-decoration-none">{{ s.phone }}</a>
+                {% else %}
+                  <span class="text-muted">No phone</span>
+                {% endif %}
+              </div>
+              {% if s.email != 'N/A' %}
+              <div>
+                <i class="bi bi-envelope me-1 text-muted"></i>
+                <a href="mailto:{{ s.email }}" class="text-decoration-none small">{{ s.email }}</a>
+              </div>
+              {% endif %}
+            </td>
+            <td>
+              <small class="text-muted">{{ s.address }}</small>
+            </td>
+            <td class="text-center">
+              <span class="badge bg-info fs-6">{{ s.total_supplies }}</span>
+            </td>
+            <td>
+              {% if s.last_supply_date %}
+                <small>{{ s.last_supply_date.split('.')[0] }}</small>
+              {% else %}
+                <small class="text-muted">Never</small>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-outline-primary view-supplier-btn" 
+                      data-id="{{ s.id }}"
+                      data-name="{{ s.name }}"
+                      data-bs-toggle="modal" 
+                      data-bs-target="#supplierDetailModal">
+                <i class="bi bi-eye"></i> View
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+      <i class="bi bi-truck" style="font-size: 3rem; color: #dee2e6;"></i>
+      <p class="text-muted mt-3">No suppliers registered yet</p>
+      <p class="text-muted small">Suppliers are automatically created when you include supplier info in receiving transactions</p>
+      <a href="{{ url_for('receiving.receive_stock') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>Receive Stock
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Supplier Detail Modal -->
+<div class="modal fade" id="supplierDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content" style="border-radius: 1rem;">
+      <div class="modal-header bg-primary text-white border-0">
+        <h5 class="modal-title">
+          <i class="bi bi-building me-2"></i>Supplier Details
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="supplier-detail-content">
+          <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // View supplier details
+    document.querySelectorAll('.view-supplier-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const supplierId = this.dataset.id;
+            const supplierName = this.dataset.name;
+            const content = document.getElementById('supplier-detail-content');
+            
+            content.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-3">Loading transactions from ${supplierName}...</p>
+                </div>
+            `;
+            
+            try {
+                // Fetch transactions for this supplier
+                const response = await fetch(`/receiving/history?supplier_name=${encodeURIComponent(supplierName)}`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load supplier data');
+                }
+                
+                // Since we're getting HTML, we'll just show basic info
+                // In a full implementation, you'd have an API endpoint for supplier details
+                content.innerHTML = `
+                    <div class="alert alert-info border-0" style="border-radius: 0.75rem;">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Supplier History</strong>
+                        <p class="mb-0 mt-2">
+                            To view all transactions from ${supplierName}, 
+                            <a href="/receiving/history?supplier_name=${encodeURIComponent(supplierName)}" class="alert-link">
+                                click here to open the history page with this filter applied
+                            </a>.
+                        </p>
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <a href="/receiving/history?supplier_name=${encodeURIComponent(supplierName)}" 
+                           class="btn btn-primary">
+                            <i class="bi bi-clock-history me-2"></i>View All Transactions
+                        </a>
+                    </div>
+                `;
+                
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="alert alert-danger border-0" style="border-radius: 0.75rem;">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Failed to load supplier details. Please try again.
+                    </div>
+                `;
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

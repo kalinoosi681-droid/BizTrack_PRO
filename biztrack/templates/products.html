@@ -52,15 +52,18 @@
           </div>
           
           <div class="row">
+            <!-- In the ADD form section -->
             <div class="col-6 mb-3">
-              <label class="form-label"><i class="fas fa-cubes me-1"></i>Quantity</label>
-              {{ add_form.qty(class="form-control", id="add_product_qty", placeholder="Stock count", min="0", **{'autocomplete': 'off'}) }}
-              <small class="form-text text-muted">For bulk items, set to 0. Stock is tracked by the base item.</small>
+                <label class="form-label">Quantity</label>
+                {{ add_form.qty(class="form-control", id="add_product_qty") }}
+                <small class="form-text text-muted">Initial stock. Future changes via <a href="{{ url_for('receiving.index') }}">Receiving</a>
+                </small>
             </div>
             <div class="col-6 mb-3">
               <label class="form-label"><i class="fas fa-dollar-sign me-1"></i>Price (M)</label>
               {{ add_form.price(class="form-control", id="add_product_price", step="0.01", placeholder="Selling price", **{'autocomplete': 'off'}) }}
             </div>
+            <small class="form-text text-muted px-3">For bulk items, set Quantity to 0. Stock is tracked by the base item.</small>
           </div>
 
           <div class="form-check form-switch mb-3">
@@ -119,9 +122,16 @@
           
           <div class="row">
             <div class="col-6 mb-3">
-              <label class="form-label">Quantity</label>
-              {{ update_form.qty(class="form-control", id="update_product_qty") }}
-            </div>
+    <label class="form-label">
+        Quantity
+        <i class="bi bi-lock-fill text-danger ms-1" 
+           title="Locked: Use Receiving function to update stock"></i>
+    </label>
+    {{ update_form.qty(class="form-control", id="update_product_qty", readonly=True) }}
+    <small class="form-text text-danger">
+        <i class="bi bi-info-circle me-1"></i>Stock changes via Receiving only
+    </small>
+</div>
             <div class="col-6 mb-3">
               <label class="form-label">Price (M)</label>
               {{ update_form.price(class="form-control", id="update_product_price", step="0.01") }}
